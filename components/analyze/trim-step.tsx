@@ -41,7 +41,7 @@ function TimeField({ label, value, onCommit, max }: { label: string; value: numb
 
 export function TrimStep({
   duration,
-  playable,
+  canPreview,
   trim,
   onTrim,
   currentTime,
@@ -50,7 +50,8 @@ export function TrimStep({
   onBack,
 }: {
   duration: number | null;
-  playable: boolean;
+  /** False when there is a video but the browser can't play it (e.g. HEVC). */
+  canPreview: boolean;
   trim: TrimState;
   onTrim: (t: TrimState) => void;
   currentTime: number;
@@ -63,7 +64,7 @@ export function TrimStep({
 
   return (
     <div>
-      {duration !== null && playable ? (
+      {duration !== null && canPreview ? (
         <div>
           <TrimTimeline duration={duration} value={trim.range} onChange={setRange} skips={trim.skips} currentTime={currentTime} onSeek={onSeek} />
         </div>

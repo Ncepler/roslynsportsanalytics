@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api, deleteFromGemini, uploadToGemini, waitForActive, type GeminiFile } from "@/lib/client/api";
-import { runAppearanceNotes, runPossessionLog, type Resolution } from "@/lib/client/run";
+import { ApiError, type GeminiFile } from "@/lib/client/api";
+import { realBackend, type Backend } from "@/lib/client/backend";
+import type { Resolution } from "@/lib/client/run";
 import { keptRanges, planSegments, totalSeconds } from "@/lib/client/segments";
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
@@ -27,6 +28,8 @@ export type Estimate = { tokens: number; cost: number; seconds: number; measured
 const ROUGH_TOKENS_PER_SECOND: Record<Resolution, number> = { low: 100, high: 300 };
 const APPEARANCE_SECONDS = 120;
 const now = () => performance.now();
+/** Length of the sample game when the /test page runs without a video. */
+const NO_VIDEO_SECONDS = 36 * 60;
 
 const basketballDefaults = (): GameSetup => ({
   sportId: "basketball",
@@ -38,7 +41,7 @@ const basketballDefaults = (): GameSetup => ({
   statIds: defaultStatIds(SPORTS.basketball),
 });
 
-export function AnalyzeFlow() {
+export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () => Backend; demo?: boolean }) {
   const [step, setStep] = useState<StepIndex>(0);
   const [reachable, setReachable] = useState<StepIndex>(0);
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +60,7 @@ export function AnalyzeFlow() {
   const uploadAbort = useRef<AbortController | null>(null);
   const runAbort = useRef<AbortController | null>(null);
   const geminiName = useRef<string | null>(null);
+  const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
 
   const go = useCallback((s: StepIndex) => {
     setStep(s);
@@ -70,39 +74,41 @@ export function AnalyzeFlow() {
     uploadAbort.current = ctrl;
     setUpload({ status: "uploading", progress: 0 });
     try {
-      const uploaded = await uploadToGemini(f, (p) => setUpload({ status: "uploading", progress: p }), ctrl.signal);
+      const uploaded = await backend.upload(f, (p) => setUpload({ status: "uploading", progress: p }), ctrl.signal);
       geminiName.current = uploaded.name;
       setUpload({ status: "processing" });
-      const active = await waitForActive(uploaded.name, ctrl.signal);
+      const active = await backend.waitForActive(uploaded.name, ctrl.signal);
       setUpload({ status: "ready", file: active });
       return active;
     } catch (err) {
       if (!ctrl.signal.aborted) setUpload({ status: "error", message: err instanceof Error ? err.message : "Upload failed." });
       return null;
     }
-  }, []);
+  }, [backend]);
 
-  function pickFile(f: File) {
+  /** null = demo without a video: a fixed-length sample game and no preview. */
+  function pickFile(f: File | null) {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
-    if (geminiName.current) void deleteFromGemini(geminiName.current);
+    if (geminiName.current) void backend.deleteFile(geminiName.current);
     geminiName.current = null;
-    setFile(f);
-    setVideoUrl(URL.createObjectURL(f));
-    setDuration(null);
-    setPlayable(true);
+    const picked = f ?? new File([], "Sample game (no video)", { type: "video/mp4" });
+    setFile(picked);
+    setVideoUrl(f ? URL.createObjectURL(f) : null);
+    setDuration(f ? null : NO_VIDEO_SECONDS);
+    setPlayable(Boolean(f));
     setLog(null);
     setRun({ phase: "idle" });
-    setTrim({ range: { start: 0, end: 0 }, skips: [] });
-    void startUpload(f);
+    setTrim({ range: { start: 0, end: f ? 0 : NO_VIDEO_SECONDS }, skips: [] });
+    void startUpload(picked);
     go(1);
   }
 
   // Delete from Gemini if the tab closes; revoke the local preview.
   useEffect(() => {
-    const onUnload = () => geminiName.current && void deleteFromGemini(geminiName.current);
+    const onUnload = () => geminiName.current && void backend.deleteFile(geminiName.current);
     window.addEventListener("pagehide", onUnload);
     return () => window.removeEventListener("pagehide", onUnload);
-  }, []);
+  }, [backend]);
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
   // ---------- estimate (updates live as the trim changes) ----------
@@ -132,15 +138,9 @@ export function AnalyzeFlow() {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const counts = await Promise.all(
-          segments.map((s) =>
-            api<{ tokens: number | null }>("/api/gemini/tokens", {
-              body: { uri: readyFile.uri, mimeType: readyFile.mimeType, start: s.watch.start, end: s.watch.end, resolution },
-            }),
-          ),
-        );
-        if (cancelled || counts.some((c) => c.tokens === null)) return;
-        setMeasured({ key: estimateKey, tokens: counts.reduce((s, c) => s + (c.tokens ?? 0), 0) });
+        const counts = await Promise.all(segments.map((s) => backend.countTokens(readyFile, s.watch, resolution)));
+        if (cancelled || counts.some((c) => c === null)) return;
+        setMeasured({ key: estimateKey, tokens: counts.reduce<number>((s, c) => s + (c ?? 0), 0) });
       } catch {
         /* keep the rough estimate */
       }
@@ -149,7 +149,7 @@ export function AnalyzeFlow() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [segments, watchedSeconds, resolution, readyFile, estimateKey]);
+  }, [segments, watchedSeconds, resolution, readyFile, estimateKey, backend]);
 
   // ---------- run ----------
   async function analyze() {
@@ -161,7 +161,7 @@ export function AnalyzeFlow() {
       let gfile = readyFile;
       if (!gfile) {
         setRun({ phase: "uploading" });
-        gfile = file ? await (upload?.status === "error" || !geminiName.current ? startUpload(file) : waitForActive(geminiName.current, ctrl.signal)) : null;
+        gfile = file ? await (upload?.status === "error" || !geminiName.current ? startUpload(file) : backend.waitForActive(geminiName.current, ctrl.signal)) : null;
         if (!gfile) throw new ApiError("The upload didn't finish. Check your connection and try again.", 0);
       }
       const video = { file: gfile, resolution };
@@ -169,7 +169,7 @@ export function AnalyzeFlow() {
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
-      const notes = await runAppearanceNotes({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
+      const notes = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
       // Pause for the user to correct the notes; continueRun picks up from here.
       setRun({ phase: "notes", notes, started });
     } catch (err) {
@@ -184,12 +184,12 @@ export function AnalyzeFlow() {
       const gfile = readyFile!;
       const runSetup: GameSetup = { ...setup, tipoff: trim.tipoff, appearanceNotes: notes };
       setRun({ phase: "logging", done: 0, total: segments.length, started });
-      const result = await runPossessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
+      const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
       );
       setRun({ phase: "checking" });
       const longest = Math.max(...segments.map((s) => s.watch.end - s.watch.start));
-      recordRunSpeed((now() - started) / 1000, longest);
+      if (backend.calibrates) recordRunSpeed((now() - started) / 1000, longest);
       setRun({ phase: "building" });
       setLog(result.log);
       setRun({ phase: "done", usage: result.usage, raw: result.raw });
@@ -209,7 +209,7 @@ export function AnalyzeFlow() {
   async function cleanupGemini() {
     const name = geminiName.current;
     geminiName.current = null;
-    if (name) await deleteFromGemini(name);
+    if (name) await backend.deleteFile(name);
     setUpload(null);
   }
 
@@ -231,6 +231,12 @@ export function AnalyzeFlow() {
       <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} />
 
       {file && step !== 0 && <UploadStatus upload={upload} fileName={file.name} onRetry={() => file && void startUpload(file)} />}
+
+      {!videoUrl && file && step === 1 && (
+        <div className="mt-6 flex min-h-28 items-center justify-center rounded-[0.875rem] bg-surface-sunken px-6 py-6 text-center text-muted">
+          No video loaded. The simulation uses a {Math.round(NO_VIDEO_SECONDS / 60)}-minute sample game; drag the handles to see the estimate change.
+        </div>
+      )}
 
       {videoUrl && (
         <div className={showVideo ? "mt-6" : "hidden"}>
@@ -255,12 +261,12 @@ export function AnalyzeFlow() {
       )}
 
       <div className={step === 1 ? "mt-4" : "mt-8"}>
-        {step === 0 && <UploadStep onPick={pickFile} />}
+        {step === 0 && <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} />}
         {step === 1 && (
           <>
             <TrimStep
               duration={duration}
-              playable={playable && duration !== null}
+              canPreview={playable || !videoUrl}
               trim={trim}
               onTrim={setTrim}
               currentTime={currentTime}
@@ -290,10 +296,18 @@ export function AnalyzeFlow() {
             onContinue={continueRun}
             onCancel={cancelRun}
             onBack={() => go(2)}
+            demo={demo}
           />
         )}
         {step === 4 && log && (
-          <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+          <>
+            {demo && (
+              <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+                Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
+              </p>
+            )}
+            <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+          </>
         )}
       </div>
     </div>
