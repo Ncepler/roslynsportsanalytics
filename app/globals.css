@@ -1,0 +1,209 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Tailwind 4 is configured here (CSS-first); there is no
+ * tailwind.config file. Raw values live on :root, @theme exposes them as
+ * utilities (bg-surface, text-muted, ease-out, duration-fast, ...).
+ *
+ * Brand colors are unknown (CLAUDE.md section 18 q7). The accent is one
+ * hue variable: change --accent-hue to rebrand.
+ */
+:root {
+  --accent-hue: 250;
+
+  /* Neutral scale, light mode */
+  --bg: oklch(0.985 0.002 var(--accent-hue));
+  --surface: oklch(1 0 0);
+  --surface-sunken: oklch(0.965 0.003 var(--accent-hue));
+  --text: oklch(0.21 0.01 var(--accent-hue));
+  --text-muted: oklch(0.47 0.012 var(--accent-hue));
+  --border: oklch(0.9 0.004 var(--accent-hue));
+  --border-strong: oklch(0.8 0.006 var(--accent-hue));
+
+  /* The one accent */
+  --accent: oklch(0.5 0.12 var(--accent-hue));
+  --accent-hover: oklch(0.45 0.12 var(--accent-hue));
+  --accent-fg: oklch(0.99 0 0);
+
+  /* Status */
+  --warning-bg: oklch(0.96 0.045 85);
+  --warning-text: oklch(0.4 0.08 70);
+  --warning-border: oklch(0.86 0.08 85);
+  --danger: oklch(0.52 0.18 27);
+
+  /* Translucent header material */
+  --header-bg: oklch(0.985 0.002 var(--accent-hue) / 0.72);
+  --header-blur: 20px;
+
+  /* Motion (CLAUDE.md section 19) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-press: 120ms; /* button press, 100-160 */
+  --duration-fast: 160ms; /* popovers, 125-200 */
+  --duration-base: 200ms; /* dropdowns, 150-250 */
+  --duration-slow: 250ms; /* upper bound for UI */
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.17 0.006 var(--accent-hue));
+    --surface: oklch(0.21 0.007 var(--accent-hue));
+    --surface-sunken: oklch(0.15 0.006 var(--accent-hue));
+    --text: oklch(0.95 0.004 var(--accent-hue));
+    --text-muted: oklch(0.72 0.01 var(--accent-hue));
+    --border: oklch(0.3 0.008 var(--accent-hue));
+    --border-strong: oklch(0.4 0.01 var(--accent-hue));
+
+    --accent: oklch(0.72 0.11 var(--accent-hue));
+    --accent-hover: oklch(0.78 0.1 var(--accent-hue));
+    --accent-fg: oklch(0.18 0.02 var(--accent-hue));
+
+    --warning-bg: oklch(0.27 0.04 75);
+    --warning-text: oklch(0.88 0.08 85);
+    --warning-border: oklch(0.4 0.06 75);
+    --danger: oklch(0.72 0.15 27);
+
+    --header-bg: oklch(0.17 0.006 var(--accent-hue) / 0.72);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --header-bg: var(--bg);
+    --header-blur: 0px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --text-muted: var(--text);
+    --border: var(--border-strong);
+    --header-bg: var(--bg);
+    --header-blur: 0px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-press: 0ms;
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-text: var(--warning-text);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer);
+
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@utility tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+
+  ::selection {
+    background: oklch(from var(--accent) l c h / 0.22);
+  }
+
+  input {
+    caret-color: var(--accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Buttons: press feedback on pointer-down (CLAUDE.md section 19). Only
+     transform and colors transition; hover changes are pointer-gated. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding-inline: 1rem;
+    border-radius: 0.625rem;
+    font-size: 0.9375rem;
+    font-weight: 550;
+    white-space: nowrap;
+    user-select: none;
+    touch-action: manipulation;
+    transition:
+      transform var(--duration-press) var(--ease-out),
+      background-color var(--duration-press) ease,
+      border-color var(--duration-press) ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-ghost {
+    color: var(--text-muted);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--surface-sunken);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--surface-sunken);
+    }
+  }
+}
