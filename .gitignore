@@ -1,0 +1,4 @@
+
+# impeccable: platform engine binary (21MB) and local hook settings
+.claude/skills/impeccable/scripts/bin/
+.claude/settings.local.json
