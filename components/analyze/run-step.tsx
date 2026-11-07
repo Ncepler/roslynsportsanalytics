@@ -49,6 +49,7 @@ export function RunStep({
   onContinue,
   onCancel,
   onBack,
+  demo = false,
 }: {
   keptSeconds: number;
   segments: number;
@@ -61,6 +62,7 @@ export function RunStep({
   onContinue: (notes: string) => void;
   onCancel: () => void;
   onBack: () => void;
+  demo?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [notes, setNotes] = useState(run.phase === "notes" ? run.notes : "");
@@ -205,7 +207,11 @@ export function RunStep({
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
                 <div className="h-full origin-left bg-accent transition-transform duration-[var(--duration-slow)] ease-linear" style={{ transform: `scaleX(${run.total ? Math.max(0.03, run.done / run.total) : 0})` }} />
               </div>
-              {remainingMin !== null && <p className="mt-2 text-sm text-muted tabular-nums">About {remainingMin} min remaining (estimate)</p>}
+              {remainingMin !== null && (
+                <p className="mt-2 text-sm text-muted tabular-nums">
+                  {demo ? `A real run would take about ${remainingMin} min (estimate). The simulation finishes in seconds.` : `About ${remainingMin} min remaining (estimate)`}
+                </p>
+              )}
             </div>
           )}
           <p className="mt-5 text-sm text-muted">
