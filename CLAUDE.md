@@ -2,7 +2,7 @@
 
 Read this whole file before doing anything. It holds every decision made so far for this project. If Noah asks something that is answered here, answer from here. When Noah makes a new decision (new stat, new sport, new rule), update the matching section of this file in the same session.
 
-**Status: phase 1 of section 17 is done** (scaffold, password gate, app shell, design tokens). Start each new phase in plan mode. Present a plan, get Noah's approval, then build.
+**Status:** phase 1 is live. Phases 2–5 (basketball end-to-end: upload, trim, setup, Gemini analysis, derivations, review, export, segmenting, appearance notes) are built on branch `claude/youthful-hopper-oz3qs6` but not yet tested on a real clip (waiting on the Gemini key and a test clip). Lacrosse and the Season tab are not started. Start each new phase in plan mode.
 
 ---
 
@@ -106,7 +106,7 @@ type PossessionRow = {
 
 **Possession context:** `M` = against man defense, `Z` = against zone, `F` = fast break (no set defense). One per possession, mutually exclusive. Noah confirmed F means fast break, in basketball and lacrosse.
 
-**Possession definition:** default to the standard basketball definition (starts when a team gains control, ends on a made basket, turnover, defensive rebound, or end of period). **Ask Noah** whether an offensive rebound continues the same possession or starts a new row. In the club's sample log, many rows hold a missed shot and a rebound together.
+**Possession definition:** the standard basketball definition (starts when a team gains control, ends on a made basket, turnover, defensive rebound, or end of period). **Noah confirmed: an offensive rebound continues the same possession (same row).**
 
 ## 8. Sport config system and tiers
 
@@ -251,12 +251,12 @@ Acceptance check for each phase: run it on a real clip or sample, and show Noah 
 ## 18. Open questions to ask Noah (do not guess)
 
 1. Lacrosse efficiency and Total Efficiency formulas.
-2. Whether an offensive rebound continues a possession or starts a new row; whose rebounds the Off / Def columns count.
+2. ~~Whether an offensive rebound continues a possession~~ (answered: same row). Still open: whose rebounds the Off / Def columns count. Current code counts every rebound inside that row's possessions (Off = the offense's boards, Def = the defense's board that ended it).
 3. What the number in tab names (like "…121") means.
 4. Which total is right for the plus/minus mismatch (section 10).
 5. Roster entry format; whether to log opponent possessions in the sheets or only for checks.
-6. Whether time of possession is in seconds or M:SS.
-7. Whether the club has brand colors for the design.
+6. Whether time of possession is in seconds or M:SS. (Built as M:SS to match the sample.) Also open: in the possession-log sheet, are the 2PT / 3PT / FT cells makes, attempts, or points? Built as makes.
+7. ~~Brand colors~~ (answered: none for now; keep the slate-blue accent).
 
 ## 19. Design
 
