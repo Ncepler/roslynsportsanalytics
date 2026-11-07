@@ -255,7 +255,7 @@ function PossessionEditor({
   if (log.possessions.length === 0) return <p className="mt-4 text-muted">The AI didn&apos;t log any possessions in this stretch.</p>;
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-[0.75rem] border border-border">
+    <div className="relative mt-4 overflow-x-auto rounded-[0.75rem] border border-border">
       <table className="w-full min-w-[44rem] border-collapse text-sm">
         <thead className="bg-surface-sunken">
           <tr>

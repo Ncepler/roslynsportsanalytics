@@ -47,7 +47,7 @@ export async function startResumableUpload(opts: { size: number; mimeType: strin
   });
   const uploadUrl = res.headers.get("x-goog-upload-url");
   if (!res.ok || !uploadUrl) {
-    throw new Error(`Gemini refused the upload session (HTTP ${res.status}).`);
+    throw Object.assign(new Error(`Gemini refused the upload session (HTTP ${res.status}).`), { status: res.status });
   }
   return uploadUrl;
 }

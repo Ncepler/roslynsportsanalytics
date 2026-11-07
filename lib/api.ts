@@ -23,6 +23,8 @@ export async function guarded(request: Request, handler: () => Promise<Response>
     const status = (err as { status?: number }).status;
     if (status === 402) return jsonError(402, "Gemini credits are used up. Add credits in Google AI Studio.");
     if (status === 429) return jsonError(429, "Gemini rate limit hit. Wait a minute and try again.");
+    if (status === 400 && /api key/i.test(err instanceof Error ? err.message : "")) return jsonError(503, "Gemini rejected the API key. Check GEMINI_API_KEY.");
+    if (status === 400 || status === 401 || status === 403) return jsonError(502, `Gemini rejected the request (HTTP ${status}). Check the API key and model name.`);
     console.error("Gemini route error:", err instanceof Error ? err.message : "unknown");
     return jsonError(502, "Gemini request failed. Try again.");
   }

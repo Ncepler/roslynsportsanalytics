@@ -240,7 +240,7 @@ export function AnalyzeFlow() {
             controls
             playsInline
             preload="metadata"
-            className="aspect-video w-full rounded-[0.875rem] bg-black"
+            className="mx-auto max-h-[min(46vh,28rem)] w-full rounded-[0.875rem] bg-black object-contain"
             onLoadedMetadata={(e) => {
               const d = e.currentTarget.duration;
               if (Number.isFinite(d) && d > 0) {
@@ -254,7 +254,7 @@ export function AnalyzeFlow() {
         </div>
       )}
 
-      <div className="mt-8">
+      <div className={step === 1 ? "mt-4" : "mt-8"}>
         {step === 0 && <UploadStep onPick={pickFile} />}
         {step === 1 && (
           <>

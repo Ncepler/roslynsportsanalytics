@@ -63,23 +63,24 @@ export function TrimStep({
 
   return (
     <div>
-      <h2 className="text-xl font-semibold tracking-[-0.01em]">Cut off warmups and the end</h2>
-      <p className="mt-1 text-muted">
-        Drag the handles to where the game starts and ends. Everything outside them is ignored and isn&apos;t paid for.
-      </p>
-
       {duration !== null && playable ? (
-        <div className="mt-6">
+        <div>
           <TrimTimeline duration={duration} value={trim.range} onChange={setRange} skips={trim.skips} currentTime={currentTime} onSeek={onSeek} />
         </div>
       ) : (
-        <p className="mt-6 rounded-[0.625rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
+        <p className="rounded-[0.625rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
           This browser can&apos;t preview this video (common with HEVC exports). Type the start and end times instead; the
           analysis still works.
         </p>
       )}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-sm">
+      <h2 className="mt-8 text-xl font-semibold tracking-[-0.01em]">Cut off warmups and the end</h2>
+      <p className="mt-1 text-muted">
+        Drag the handles to where the game starts and ends, or type the times. Everything outside them is ignored and
+        isn&apos;t paid for.
+      </p>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:max-w-sm">
         <TimeField label="Game starts at" value={trim.range.start} onCommit={(t) => setRange({ ...trim.range, start: Math.min(t, trim.range.end - 5) })} />
         <TimeField label="Game ends at" value={trim.range.end} max={duration ?? undefined} onCommit={(t) => setRange({ ...trim.range, end: Math.max(t, trim.range.start + 5) })} />
       </div>
