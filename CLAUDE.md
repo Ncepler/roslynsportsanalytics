@@ -2,7 +2,7 @@
 
 Read this whole file before doing anything. It holds every decision made so far for this project. If Noah asks something that is answered here, answer from here. When Noah makes a new decision (new stat, new sport, new rule), update the matching section of this file in the same session.
 
-**Status: nothing is built yet.** Start in plan mode. Present a plan, get Noah's approval, then build in the phases listed in section 17.
+**Status: phase 1 of section 17 is done** (scaffold, password gate, app shell, design tokens). Start each new phase in plan mode. Present a plan, get Noah's approval, then build.
 
 ---
 
@@ -40,6 +40,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 - **Gemini API** (`@google/genai` SDK) for watching video.
 - **Claude API** (Anthropic SDK) for the Season tab's hypotheses and write-ups. Verify current model names in the docs before hardcoding (as of this writing: `claude-sonnet-5-5` is a reasonable default). Put model names in env vars.
 - Env vars (all server-side): `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIER` (`free` or `paid`), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLUB_PASSWORD`, `ALLOW_TEST_LOGIN`, `SESSION_SECRET`.
+- **Built so far (phase 1):** Next 16 + Tailwind 4. Next 16 renamed middleware to `proxy.ts` (runs on Node); it gates every page and API route. Tailwind 4 has no config file, so all design tokens live in `app/globals.css` (one accent: change `--accent-hue`). Session cookie code is in `lib/auth/`. Routes: `/` is Analyze a game, `/season` is Season trends, `/login`. Cache Components is on, so env-driven UI (Test button, free-tier banner) is fixed at build time; the login API still checks `ALLOW_TEST_LOGIN` on every request. Changing env vars on Vercel needs a redeploy.
 - Suggested layout (adjust as needed): `/lib/sports/basketball.ts`, `/lib/sports/lacrosse.ts` (sport configs), `/lib/gemini/` (upload, prompts, schemas, segmenting), `/lib/derive/` (all math), `/lib/sheets/` (layouts, copy/CSV export, Season parsing), `/lib/season/`, `/components/`.
 
 ## 5. User flow (Analyze a game tab)

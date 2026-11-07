@@ -7,7 +7,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="sticky top-0 z-10 border-b border-border bg-[var(--header-bg)] backdrop-blur-[var(--header-blur)] backdrop-saturate-150">
-        <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 sm:gap-4 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center gap-2 px-2 sm:gap-4 sm:px-6">
           <span className="hidden text-[0.9375rem] font-semibold tracking-[-0.01em] sm:block">Roslyn Film Analyzer</span>
           <NavTabs />
           <LogoutButton />
