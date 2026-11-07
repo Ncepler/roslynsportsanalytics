@@ -10,6 +10,8 @@ export type GameSetup = {
   statIds: string[];
   /** Corrected appearance notes, plain text. Lives only for this run. */
   appearanceNotes?: string;
+  /** Video time of the opening tip, if the user marked it. Helps scoreboard sync. */
+  tipoff?: number;
 };
 
 const nullable = (type: string | string[], extra: Record<string, unknown> = {}) => ({
@@ -105,6 +107,7 @@ export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segmen
     `- "opponent": ${setup.awayName}, wearing ${setup.awayColor}. ${roster(setup.awayName, setup.awayRoster)}`,
     setup.appearanceNotes?.trim() ? `\nPlayer appearance notes (from earlier in this game):\n${setup.appearanceNotes.trim()}` : "",
     "",
+    setup.tipoff !== undefined ? `The opening tip-off is at ${setup.tipoff.toFixed(1)}s of the video.` : "",
     `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s of the video. Report every videoTime in seconds from the start of the FULL video file, not from the start of this section.`,
     "",
     `Possession rule: ${sport.possessionDefinition}`,
@@ -120,6 +123,29 @@ export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segmen
     "- Set confidence to low when the camera angle, a cut, or players blocking the view made the possession hard to follow.",
     "- Each event's description is one short line a person can check against the video.",
   ]
-    .filter((line) => line !== null)
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
     .join("\n");
+}
+
+/** Appearance-notes pass (section 6.2): short, plain-text notes for one run only. */
+export const appearanceSchema = {
+  type: "object",
+  properties: {
+    notes: {
+      type: "array",
+      description: 'One line per player you can tell apart, e.g. "Roslyn #5: white jersey, headband, tallest on court".',
+      items: { type: "string" },
+    },
+  },
+  required: ["notes"],
+};
+
+export function appearancePrompt(setup: GameSetup, segment: { start: number; end: number }) {
+  return [
+    "Watch this stretch of a high school basketball game and write short notes that would help someone tell the players apart later in the same video.",
+    `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
+    `Watch from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s.`,
+    "For each player you can see clearly: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
+    "Do not describe faces. Do not guess names. If a jersey number is unreadable, say so.",
+  ].join("\n");
 }

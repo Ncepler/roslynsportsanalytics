@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { AnalyzeFlow } from "@/components/analyze/analyze-flow";
 
 export const metadata: Metadata = { title: "Analyze a game · Roslyn Film Analyzer" };
 
 export default function AnalyzePage() {
   return (
-    <section className="max-w-[38rem]">
+    <section>
       <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Analyze a game</h1>
-      <p className="mt-3 text-muted">
-        Upload a game video, trim off warmups, set the sport, teams, and stats to track, then analyze it. The results
-        come back as tables that match the club&apos;s sheets, ready to review and copy into Google Sheets.
+      <p className="mt-2 max-w-[38rem] text-muted">
+        Upload a game video, trim it, set up the teams, and get tables that match the club&apos;s sheets.
       </p>
-      <p className="mt-6 text-sm text-muted">Not built yet.</p>
+      <div className="mt-8">
+        <AnalyzeFlow />
+      </div>
     </section>
   );
 }

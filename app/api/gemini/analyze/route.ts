@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
 import { startVideoInteraction } from "@/lib/gemini/client";
-import { possessionLogPrompt, possessionLogSchema } from "@/lib/gemini/prompt";
+import { appearancePrompt, appearanceSchema, possessionLogPrompt, possessionLogSchema } from "@/lib/gemini/prompt";
 import { parseSetup, parseVideoRange } from "@/lib/gemini/validate";
 import { getSport } from "@/lib/sports";
 
@@ -20,10 +20,12 @@ export async function POST(request: Request) {
     if (typeof setup === "string") return jsonError(400, setup);
     const sport = getSport(setup.sportId)!;
 
+    // kind "appearance" = the short player-notes pass; default = possession log.
+    const appearance = body?.kind === "appearance";
     const id = await startVideoInteraction({
       ...range,
-      prompt: possessionLogPrompt(sport, setup, range),
-      schema: possessionLogSchema(sport, setup.statIds),
+      prompt: appearance ? appearancePrompt(setup, range) : possessionLogPrompt(sport, setup, range),
+      schema: appearance ? appearanceSchema : possessionLogSchema(sport, setup.statIds),
     });
     return NextResponse.json({ id });
   });
