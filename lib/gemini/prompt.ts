@@ -10,6 +10,15 @@ export type GameSetup = {
   statIds: string[];
   /** Corrected appearance notes, plain text. Lives only for this run. */
   appearanceNotes?: string;
+  /** Starters' jersey numbers, checked by the user (plus/minus needs who started). */
+  starters?: { roslyn: string[]; opponent: string[] };
+};
+
+/** What the starters request returns (section 6.1 scoreboard check folded in). */
+export type AppearanceResult = {
+  notes: string;
+  starters: { roslyn: string[]; opponent: string[] };
+  scoreboard: { visible: boolean; quarter: boolean; clock: boolean; score: boolean } | null;
 };
 
 const nullable = (type: string | string[], extra: Record<string, unknown> = {}) => ({
@@ -17,20 +26,26 @@ const nullable = (type: string | string[], extra: Record<string, unknown> = {}) 
   ...extra,
 });
 
-/** Which event types and fields the checked stats need. */
-export function requestedShape(sport: SportConfig, statIds: string[]) {
-  const checked = sport.stats.filter((s) => statIds.includes(s.id) && s.source === "logged");
+const passOf = (s: { pass?: 1 | 2 | 3 }) => s.pass ?? 1;
+
+/** The passes a run needs for the checked stats, always including pass 1 (section 6.3). */
+export function passesNeeded(sport: SportConfig, statIds: string[]): (1 | 2 | 3)[] {
+  const passes = new Set<1 | 2 | 3>([1]);
+  for (const s of sport.stats) if (s.source === "logged" && statIds.includes(s.id)) passes.add(passOf(s));
+  return [...passes].sort();
+}
+
+/** Which event types and fields the checked stats of one pass need. */
+export function requestedShape(sport: SportConfig, statIds: string[], pass: 1 | 2 | 3 = 1) {
+  const checked = sport.stats.filter((s) => statIds.includes(s.id) && s.source === "logged" && passOf(s) === pass);
   const events = new Set<EventType>(checked.flatMap((s) => s.events ?? []));
   const fields = new Set<EventField>(checked.flatMap((s) => s.fields ?? []));
-  // The scoreboard check needs points for both teams, so shots are always logged.
-  events.add("shot");
+  // The scoreboard check needs points for both teams, so pass 1 always logs shots.
+  if (pass === 1) events.add("shot");
   return { checked, events: [...events], fields: [...fields] };
 }
 
-/** JSON schema for the possession log, built from the checked stats. */
-export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
-  const { events, fields } = requestedShape(sport, statIds);
-
+function eventProperties(sport: SportConfig, events: EventType[], fields: EventField[]) {
   const eventProps: Record<string, unknown> = {
     type: { type: "string", enum: events },
     team: { type: "string", enum: ["roslyn", "opponent"] },
@@ -41,11 +56,24 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
     made: nullable("boolean", { description: sport.id === "lacrosse" ? "Shots only: true if it was a goal." : "Shots only." }),
     description: { type: "string", description: "One short line describing what you saw." },
   };
+  if (events.includes("substitution")) {
+    eventProps.playerIn = nullable("string", { description: "Substitutions only: jersey number of the player coming in, or null if unreadable." });
+    eventProps.playerOut = nullable("string", { description: "Substitutions only: jersey number of the player going out, or null if unreadable." });
+  }
   if (events.includes("rebound")) eventProps.reboundType = nullable("string", { enum: ["offensive", "defensive", null] });
   if (fields.includes("shotType")) eventProps.shotType = nullable("string", { enum: ["drive", "catch-and-shoot", "pull-up", "post", "putback", "other", null] });
   if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: ["paint", "mid-range", "corner 3", "above-the-break 3", null] });
   if (fields.includes("turnoverType")) eventProps.turnoverType = nullable("string", { enum: ["steal", "bad pass", "travel", "offensive foul", "out of bounds", "violation", "other", null] });
   if (fields.includes("contested")) eventProps.contested = nullable("boolean");
+  return eventProps;
+}
+
+const EVENT_REQUIRED = ["type", "team", "videoTime", "clock", "player", "description"];
+
+/** JSON schema for the possession log (pass 1), built from the checked stats. */
+export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
+  const { events, fields } = requestedShape(sport, statIds, 1);
+  const eventProps = eventProperties(sport, events, fields);
 
   return {
     type: "object",
@@ -64,7 +92,7 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
             context: nullable("string", { enum: ["M", "Z", "F", null] }),
             events: {
               type: "array",
-              items: { type: "object", properties: eventProps, required: ["type", "team", "videoTime", "clock", "player", "description"] },
+              items: { type: "object", properties: eventProps, required: EVENT_REQUIRED },
             },
             confidence: { type: "string", enum: ["high", "medium", "low"] },
             note: nullable("string"),
@@ -100,7 +128,7 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
 }
 
 export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }) {
-  const { checked } = requestedShape(sport, setup.statIds);
+  const { checked } = requestedShape(sport, setup.statIds, 1);
   const roster = (label: string, list: string) => (list.trim() ? `${label} jersey numbers: ${list.trim()}.` : "");
 
   return [
@@ -140,8 +168,25 @@ export const appearanceSchema = {
       description: 'One line per player, e.g. "Roslyn #5: white jersey, headband, tallest on court".',
       items: { type: "string" },
     },
+    starters: {
+      type: "object",
+      description: "Jersey numbers of the starters, as text. Use an empty string for a starter whose number you can't read.",
+      properties: { roslyn: { type: "array", items: { type: "string" } }, opponent: { type: "array", items: { type: "string" } } },
+      required: ["roslyn", "opponent"],
+    },
+    scoreboard: {
+      type: "object",
+      description: "Whether the scoreboard graphic is visible and each part is readable at this video quality.",
+      properties: {
+        visible: { type: "boolean" },
+        quarter: { type: "boolean", description: "Period/quarter readable" },
+        clock: { type: "boolean", description: "Game clock readable" },
+        score: { type: "boolean", description: "Both teams' scores readable" },
+      },
+      required: ["visible", "quarter", "clock", "score"],
+    },
   },
-  required: ["notes"],
+  required: ["notes", "starters", "scoreboard"],
 };
 
 export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }) {
@@ -153,5 +198,58 @@ export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: 
     `Watch from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s.`,
     "For each player: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
     "Do not describe faces. Do not guess names. If a jersey number is unreadable, say so.",
+    "Also list the starters' jersey numbers, and say whether the scoreboard is visible and whether its period, clock, and both scores are readable. Only say readable if you could actually read them.",
   ].join("\n");
+}
+
+// ---------- passes 2 and 3: add events to pass 1's possessions ----------
+
+export type PossessionRef = { team: "roslyn" | "opponent"; videoStart: number; videoEnd: number; quarter: string | null; clockStart: string | null };
+
+export function eventsPassSchema(sport: SportConfig, statIds: string[], pass: 2 | 3) {
+  const { events, fields } = requestedShape(sport, statIds, pass);
+  return {
+    type: "object",
+    properties: {
+      events: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            possession: { type: "integer", description: "The # of the possession (from the list) this event belongs to." },
+            ...eventProperties(sport, events, fields),
+          },
+          required: ["possession", ...EVENT_REQUIRED],
+        },
+      },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: ["events", "warnings"],
+  };
+}
+
+export function eventsPassPrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }, pass: 2 | 3, possessions: PossessionRef[]) {
+  const { checked } = requestedShape(sport, setup.statIds, pass);
+  return [
+    `You are adding detail to a ${sport.label.toLowerCase()} possession log that was already made from this video. Log what you SEE. Never guess.`,
+    `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
+    setup.appearanceNotes?.trim() ? `Player notes (checked by a person):\n${setup.appearanceNotes.trim()}` : "",
+    pass === 3 && setup.starters && (setup.starters.roslyn.length || setup.starters.opponent.length)
+      ? `Starters: Roslyn #${setup.starters.roslyn.join(", #") || "?"}; ${setup.awayName} #${setup.starters.opponent.join(", #") || "?"}.`
+      : "",
+    `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s. Report every videoTime in seconds from the start of the FULL video file.`,
+    "",
+    "Possessions already logged (# · team · video seconds · quarter · clock):",
+    ...possessions.map((p, i) => `#${i} · ${p.team} · ${p.videoStart.toFixed(1)}-${p.videoEnd.toFixed(1)}s · Q${p.quarter ?? "?"} · ${p.clockStart ?? "?"}`),
+    "",
+    "Log ONLY these, each tagged with the # of the possession it happened in:",
+    ...checked.map((s) => `- ${s.label}: ${s.description}`),
+    "",
+    "Rules:",
+    "- Do not add up or total anything. One entry per event.",
+    "- If you cannot tell which possession an event belongs to, or cannot see it clearly, leave it out and say so in warnings. Omission beats a guess.",
+    "- Do not log shots again; they are already in the log.",
+  ]
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
+    .join("\n");
 }

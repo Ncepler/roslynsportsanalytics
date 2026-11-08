@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored Claude Code skills, not app code.
     ".claude/**",
+    // Local, git-ignored test scripts.
+    ".scratch/**",
   ]),
 ]);
 

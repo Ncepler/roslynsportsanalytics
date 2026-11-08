@@ -6,7 +6,9 @@
 import { ApiError, sleep, type GeminiFile } from "@/lib/client/api";
 import type { Backend } from "@/lib/client/backend";
 import { mergeLogs, type Range, type Segment } from "@/lib/client/segments";
-import { appearanceNotes, simulatedNoteUpdates, simulateGame, sliceForSegment } from "./simulate";
+import { passesNeeded } from "@/lib/gemini/prompt";
+import { getSport } from "@/lib/sports";
+import { appearanceNotes, simulatedNoteUpdates, simulatedStarters, simulateGame, sliceForSegment } from "./simulate";
 
 const DEMO_FILE: GeminiFile = { name: "files/simulated", uri: "simulated", mimeType: "video/mp4", state: "ACTIVE", error: null };
 
@@ -49,16 +51,26 @@ export function demoBackend(): Backend {
     async appearance(_range, _video, setup, signal) {
       await sleep(2500);
       check(signal);
-      return appearanceNotes(setup);
+      return {
+        notes: appearanceNotes(setup),
+        starters: simulatedStarters(setup),
+        scoreboard: { visible: true, quarter: true, clock: true, score: true },
+      };
     },
     async possessionLog(segments, _video, setup, signal, onSegmentDone) {
       const data = simulateGame(rangesFrom(segments), setup);
+      // Mirrors the real pass structure (section 6.3): pass 1 per part, then the later passes.
+      const sport = getSport(setup.sportId);
+      const passes = sport ? passesNeeded(sport, setup.statIds).length : 1;
+      const total = segments.length * passes;
       let done = 0;
       const parts = await Promise.all(
         segments.map(async (segment, i) => {
-          await sleep(2200 + i * 900 + Math.random() * 800);
-          check(signal);
-          onSegmentDone(++done, segments.length);
+          for (let p = 0; p < passes; p++) {
+            await sleep((p === 0 ? 1600 : 900) + i * 500 + Math.random() * 600);
+            check(signal);
+            onSegmentDone(++done, total);
+          }
           return { segment, log: sliceForSegment(data, segment.watch) };
         }),
       );

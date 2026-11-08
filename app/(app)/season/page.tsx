@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { SeasonTab } from "@/components/season/season-tab";
 
 export const metadata: Metadata = { title: "Season trends · Roslyn Film Analyzer" };
 
 export default function SeasonPage() {
   return (
-    <section className="max-w-[38rem]">
+    <section>
       <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Season trends</h1>
-      <p className="mt-3 text-muted">
-        Upload the club&apos;s finished spreadsheets to find trends across games. Every number is computed from your
-        rows, with the sample size shown, and graphs appear only where a pattern holds up.
+      <p className="mt-2 max-w-[40rem] text-muted">
+        Find patterns across games from the club&apos;s finished spreadsheets. Every number is worked out from your rows, with the number of games shown.
       </p>
-      <p className="mt-6 text-sm text-muted">Not built yet.</p>
+      <div className="mt-8">
+        <SeasonTab />
+      </div>
     </section>
   );
 }

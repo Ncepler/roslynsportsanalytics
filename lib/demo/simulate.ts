@@ -163,6 +163,25 @@ function simulateBasketball(ranges: Range[], setup: GameSetup): SimulatedGame {
   }
   scoreboard.push({ videoTime: ranges[ranges.length - 1].end - 1, quarter: lastQuarter, clock: "0:00", roslyn: score.roslyn, opponent: score.opponent });
 
+  // Substitutions (only when plus/minus or minutes are tracked): rotate the bench in every few possessions.
+  if (setup.statIds.includes("plus-minus") || setup.statIds.includes("minutes")) {
+    const bench: Record<Team, string[]> = { roslyn: ["20", "24", "33", "12", "15"], opponent: ["2", "13", "21", "30", "35"] };
+    const court: Record<Team, string[]> = { roslyn: [...players.roslyn.slice(0, 5)], opponent: [...players.opponent.slice(0, 5)] };
+    possessions.forEach((p, i) => {
+      if (i === 0 || i % 7 !== 0) return;
+      for (const t of ["roslyn", "opponent"] as const) {
+        if (!chance(0.7)) continue;
+        const outIdx = Math.floor(rand() * court[t].length);
+        const inIdx = Math.floor(rand() * bench[t].length);
+        const out = court[t][outIdx];
+        const inn = bench[t][inIdx];
+        court[t][outIdx] = inn;
+        bench[t][inIdx] = out;
+        p.events.unshift({ type: "substitution", team: t, videoTime: p.videoStart, clock: p.clockStart, player: null, playerIn: inn, playerOut: out, description: `#${inn} checks in for #${out}.` });
+      }
+    });
+  }
+
   // Plant one AI-style miss so the scoreboard check has something to catch:
   // drop a made two in the third quarter from the log (the scoreboard still has it).
   const warnings = ["The scoreboard was partly hidden by a player for about 20 seconds in the second quarter."];
@@ -349,4 +368,14 @@ export function simulatedNoteUpdates(setup: GameSetup): string[] {
     `Roslyn #${bench[1]} came in: ${ours} jersey, white shoes, ${lax ? "long-stick defense" : "usually brings the ball up"}.`,
     `${away} #${awayBench[2]} came in late in the game: ${theirs} jersey, taped fingers.`,
   ];
+}
+
+/** The starters' numbers the notes pass would return (same as the notes' first lines). */
+export function simulatedStarters(setup: GameSetup): { roslyn: string[]; opponent: string[] } {
+  const lax = setup.sportId === "lacrosse";
+  const n = lax ? 10 : 5;
+  return {
+    roslyn: roster(setup.roslynRoster, lax ? DEFAULT_LAX_ROSLYN : DEFAULT_ROSLYN).slice(0, n),
+    opponent: roster(setup.awayRoster, lax ? DEFAULT_LAX_AWAY : DEFAULT_AWAY).slice(0, n),
+  };
 }

@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { SeasonDemo } from "@/components/season/season-demo";
+import { SeasonTab } from "@/components/season/season-tab";
+import { simulateSeasonTabs } from "@/lib/demo/season";
 import { demoBackend } from "@/lib/demo/backend";
 import { AnalyzeFlow } from "./analyze-flow";
 
 /** The /test page: the real Analyze flow on the simulator, and a simulated Season trends tab. */
 export function DemoFlow() {
   const [tab, setTab] = useState<"game" | "season">("game");
+  const [demoSeason] = useState(simulateSeasonTabs);
   const tabs = [
     { id: "game", label: "Analyze a game" },
     { id: "season", label: "Season trends" },
@@ -34,7 +36,7 @@ export function DemoFlow() {
         <AnalyzeFlow makeBackend={demoBackend} demo />
       </div>
       <div className={tab === "season" ? "mt-8" : "hidden"}>
-        <SeasonDemo />
+        <SeasonTab demo demoTabs={demoSeason.tabs} demoScores={demoSeason.scores} />
       </div>
     </div>
   );

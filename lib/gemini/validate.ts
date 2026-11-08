@@ -3,7 +3,7 @@ import { getSport } from "@/lib/sports";
 import type { Resolution } from "./client";
 import { GEMINI_HOST } from "./client";
 import { MAX_RUN_SECONDS } from "./limits";
-import type { GameSetup } from "./prompt";
+import type { GameSetup, PossessionRef } from "./prompt";
 
 // Validates the video-range part of a request body. Shared by the analyze
 // and tokens routes so both enforce the same limits.
@@ -53,4 +53,23 @@ export function parseSetup(raw: unknown): GameSetup | string {
   };
   if (!setup.roslynColor || !setup.awayName || !setup.awayColor) return "Fill in both jersey colors and the away team name.";
   return setup;
+}
+
+/** Pass 1's possession list, sent back for passes 2 and 3. Capped and type-checked. */
+export function parsePossessionRefs(raw: unknown): PossessionRef[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 400) return null;
+  const out: PossessionRef[] = [];
+  for (const p of raw) {
+    if (!p || typeof p !== "object") return null;
+    const x = p as Record<string, unknown>;
+    if ((x.team !== "roslyn" && x.team !== "opponent") || !isNum(x.videoStart) || !isNum(x.videoEnd)) return null;
+    out.push({
+      team: x.team,
+      videoStart: x.videoStart,
+      videoEnd: x.videoEnd,
+      quarter: typeof x.quarter === "string" ? x.quarter.slice(0, 4) : null,
+      clockStart: typeof x.clockStart === "string" ? x.clockStart.slice(0, 8) : null,
+    });
+  }
+  return out;
 }

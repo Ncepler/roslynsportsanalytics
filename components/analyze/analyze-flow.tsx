@@ -8,7 +8,8 @@ import { keptRanges, planSegments, totalSeconds } from "@/lib/client/segments";
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
 import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/gemini/pricing";
-import { defaultStatIds, SPORTS } from "@/lib/sports";
+import { passesNeeded } from "@/lib/gemini/prompt";
+import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
 import { ReviewStep } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
@@ -57,6 +58,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const [log, setLog] = useState<PossessionLog | null>(null);
   /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
   const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
+  /** Roslyn starters the user confirmed (plus/minus). Lives only for this run. */
+  const [starterNumbers, setStarterNumbers] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
@@ -166,6 +169,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const watchedSeconds = segments.reduce((s, seg) => s + (seg.watch.end - seg.watch.start), 0);
   const readyFile = upload?.status === "ready" ? upload.file : null;
 
+  const passCount = passesNeeded(getSport(setup.sportId)!, setup.statIds).length;
   // Calibrated speed from past runs (localStorage), read once on the client.
   const [speed] = useState(() => (typeof window === "undefined" ? 0.35 : secondsPerVideoSecond()));
   const estimateKey = `${readyFile?.uri ?? ""}|${resolution}|${segments.map((s) => `${s.watch.start}-${s.watch.end}`).join(",")}`;
@@ -174,11 +178,12 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const estimate: Estimate = useMemo(() => {
     if (watchedSeconds <= 0) return null;
     const longest = Math.max(...segments.map((s) => s.watch.end - s.watch.start));
-    const seconds = longest * speed + 30;
+    // Each pass re-watches the video (cost × passes); passes 2 and 3 run together after pass 1 (time × 2).
+    const seconds = longest * speed * (passCount > 1 ? 2 : 1) + 30;
     const real = measured?.key === estimateKey ? measured.tokens : null;
-    const tokens = real ?? watchedSeconds * ROUGH_TOKENS_PER_SECOND[resolution];
-    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds), seconds, measured: real !== null };
-  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution]);
+    const tokens = (real ?? watchedSeconds * ROUGH_TOKENS_PER_SECOND[resolution]) * passCount;
+    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds * passCount), seconds, measured: real !== null };
+  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution, passCount]);
 
   // Real count via count_tokens, debounced while the user drags.
   useEffect(() => {
@@ -217,21 +222,26 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
-      const notes = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
+      const appearance = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
       // Pause for the user to correct the notes; continueRun picks up from here.
-      setRun({ phase: "notes", notes, started });
+      setRun({ phase: "notes", appearance, started });
     } catch (err) {
       failRun(err, ctrl);
     }
   }
 
-  async function continueRun(confirmedNotes: string) {
+  async function continueRun(confirmedNotes: string, starters: { roslyn: string[]; opponent: string[] }) {
     const ctrl = runAbort.current ?? new AbortController();
     const started = run.phase === "notes" ? run.started : now();
     try {
       const gfile = readyFile!;
-      const runSetup: GameSetup = { ...setup, appearanceNotes: confirmedNotes };
-      setRun({ phase: "logging", done: 0, total: segments.length, started });
+      const runSetup: GameSetup = {
+        ...setup,
+        appearanceNotes: confirmedNotes,
+        starters: { roslyn: starters.roslyn.filter(Boolean), opponent: starters.opponent.filter(Boolean) },
+      };
+      setStarterNumbers(starters.roslyn.filter(Boolean));
+      setRun({ phase: "logging", done: 0, total: segments.length * passCount, started });
       const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
       );
@@ -343,6 +353,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
           <RunStep
             keptSeconds={keptSeconds}
             segments={segments.length}
+            passes={passCount}
             estimate={estimate}
             resolution={resolution}
             onResolution={setResolution}
@@ -350,6 +361,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             run={run}
             onAnalyze={analyze}
             onContinue={continueRun}
+            starterBoxes={setup.statIds.includes("plus-minus") ? (getSport(setup.sportId)?.playersPerSide ?? 0) : 0}
+            awayName={setup.awayName || "Opponent"}
             onCancel={cancelRun}
             onBack={() => go(2)}
             demo={demo}
@@ -362,7 +375,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>

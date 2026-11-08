@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { Resolution, RunUsage } from "@/lib/client/run";
+import type { AppearanceResult } from "@/lib/gemini/prompt";
 import type { Estimate, UploadState } from "./analyze-flow";
 
 export type RunState =
   | { phase: "idle" }
   | { phase: "uploading" }
   | { phase: "appearance" }
-  | { phase: "notes"; notes: string; started: number }
+  | { phase: "notes"; appearance: AppearanceResult; started: number }
   | { phase: "logging"; done: number; total: number; started: number }
   | { phase: "checking" }
   | { phase: "building" }
@@ -39,6 +40,7 @@ function stageIndex(run: RunState, upload: UploadState | null): number {
 export function RunStep({
   keptSeconds,
   segments,
+  passes = 1,
   estimate,
   resolution,
   onResolution,
@@ -46,36 +48,45 @@ export function RunStep({
   run,
   onAnalyze,
   onContinue,
+  starterBoxes = 0,
+  awayName = "Opponent",
   onCancel,
   onBack,
   demo = false,
 }: {
   keptSeconds: number;
   segments: number;
+  /** Analysis passes per part (section 6.3); more stats checked can mean more passes. */
+  passes?: number;
   estimate: Estimate;
   resolution: Resolution;
   onResolution: (r: Resolution) => void;
   upload: UploadState | null;
   run: RunState;
   onAnalyze: () => void;
-  onContinue: (notes: string) => void;
+  onContinue: (notes: string, starters: { roslyn: string[]; opponent: string[] }) => void;
+  /** Starter number boxes are shown when plus/minus is tracked; this many per team. */
+  starterBoxes?: number;
+  awayName?: string;
   onCancel: () => void;
   onBack: () => void;
   demo?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
-  const [notes, setNotes] = useState(run.phase === "notes" ? run.notes : "");
+  const [notes, setNotes] = useState(run.phase === "notes" ? run.appearance.notes : "");
+  const [starters, setStarters] = useState<{ roslyn: string[]; opponent: string[] }>({ roslyn: [], opponent: [] });
   const [now, setNow] = useState(() => performance.now());
   const running = !["idle", "error", "done"].includes(run.phase);
   // The cost confirm only shows on /test (to demonstrate it); club members on the real page don't manage spend.
   const needsConfirm = demo && (estimate?.cost ?? 0) > 0;
 
   // When the notes arrive, load them into the editable box.
-  const incomingNotes = run.phase === "notes" ? run.notes : null;
-  const [seenNotes, setSeenNotes] = useState<string | null>(null);
-  if (incomingNotes !== null && incomingNotes !== seenNotes) {
-    setSeenNotes(incomingNotes);
-    setNotes(incomingNotes);
+  const incoming = run.phase === "notes" ? run.appearance : null;
+  const [seen, setSeen] = useState<AppearanceResult | null>(null);
+  if (incoming !== null && incoming !== seen) {
+    setSeen(incoming);
+    setNotes(incoming.notes);
+    setStarters(incoming.starters);
   }
 
   // Tick once a second for the ETA (text updates without animation).
@@ -90,12 +101,35 @@ export function RunStep({
     run.phase === "logging" && estimate ? Math.max(1, Math.round((estimate.seconds - (now - run.started) / 1000) / 60)) : null;
 
   if (run.phase === "notes") {
+    const sb = run.appearance.scoreboard;
+    const unreadable = sb === null || !sb.visible || !sb.score || !sb.clock || !sb.quarter;
+    const box = (team: "roslyn" | "opponent", i: number) => (
+      <input
+        key={i}
+        className="field min-h-10 w-14 px-2 text-center tabular-nums"
+        inputMode="numeric"
+        aria-label={`${team === "roslyn" ? "Roslyn" : awayName} starter ${i + 1}`}
+        value={starters[team][i] ?? ""}
+        onChange={(e) => {
+          const next = [...starters[team]];
+          next[i] = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
+          setStarters({ ...starters, [team]: next });
+        }}
+      />
+    );
     return (
       <div className="max-w-2xl">
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Check the starters</h2>
         <p className="mt-1 text-muted">
           The AI watched the start of the game and described every starter. Fix anything wrong, especially jersey numbers.
         </p>
+        {unreadable && (
+          <p role="alert" className="mt-3 rounded-[0.625rem] border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-text">
+            <span className="font-semibold">The AI couldn&apos;t read the scoreboard clearly</span>
+            {sb && sb.visible ? ` (${[!sb.quarter && "quarter", !sb.clock && "clock", !sb.score && "score"].filter(Boolean).join(", ")} unreadable)` : " (not visible)"}. The scoreboard check
+            may not work. Cancel and choose High detail if you can.
+          </p>
+        )}
         <p role="note" className="mt-3 rounded-[0.625rem] border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-text">
           <span className="font-semibold">You&apos;ll check again at the end.</span> The AI keeps these notes up to date as it watches (substitutes,
           numbers it reads later), so come back and check the updated notes on the results page.
@@ -107,11 +141,23 @@ export function RunStep({
           onChange={(e) => setNotes(e.target.value)}
         />
         <p className="hint mt-2">These notes are used only for this run, then thrown away.</p>
+        {starterBoxes > 0 && (
+          <fieldset className="mt-5">
+            <legend className="label">Starters&apos; jersey numbers (for plus/minus)</legend>
+            {(["roslyn", "opponent"] as const).map((team) => (
+              <div key={team} className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="w-24 text-sm">{team === "roslyn" ? "Roslyn" : awayName}</span>
+                {Array.from({ length: starterBoxes }, (_, i) => box(team, i))}
+              </div>
+            ))}
+            <p className="hint mt-2">Leave a box empty if you can&apos;t tell. Plus/minus is only worked out for the numbers here.</p>
+          </fieldset>
+        )}
         <div className="mt-4 flex gap-2">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => onContinue(notes)}>
+          <button type="button" className="btn btn-primary" onClick={() => onContinue(notes, starters)}>
             Looks right, log possessions
           </button>
         </div>
@@ -164,7 +210,8 @@ export function RunStep({
           </dl>
           <p className="hint mt-2">
             {estimate?.measured ? "Based on Gemini's real token count for this video." : "Rough guess until the upload finishes and Gemini counts the video."}{" "}
-            Prices are unverified. Runs in {segments} {segments === 1 ? "part" : "parts"}.
+            Prices are unverified. Runs in {segments} {segments === 1 ? "part" : "parts"}
+            {passes > 1 ? `, ${passes} passes each (the AI watches each part ${passes} times, once per group of stats)` : ""}.
           </p>
 
           {needsConfirm && (
@@ -196,9 +243,14 @@ export function RunStep({
           <ol className="space-y-2.5">
             {STAGES.map((label, i) => {
               const state = i < current ? "done" : i === current ? "active" : "todo";
-              const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} parts done` : "";
+              const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} steps done` : "";
               return (
-                <li key={label} className={`flex items-center gap-3 ${state === "todo" ? "text-muted" : ""}`}>
+                // Stage change: opacity crossfade with --ease-out (section 19); durations drop to 0 under reduced motion.
+                <li
+                  key={label}
+                  className="flex items-center gap-3 transition-opacity duration-[var(--duration-slow)] ease-out"
+                  style={{ opacity: state === "todo" ? 0.45 : 1 }}
+                >
                   <span
                     aria-hidden
                     className={`size-2.5 rounded-full ${state === "done" ? "bg-accent" : state === "active" ? "bg-accent ring-4 ring-[oklch(from_var(--accent)_l_c_h/0.2)]" : "bg-border-strong"}`}

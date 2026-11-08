@@ -18,6 +18,7 @@ export const lacrosse: SportConfig = {
   stats: [
     {
       id: "shots",
+      pass: 1,
       label: "Shots and goals",
       tier: "reliable",
       source: "logged",
@@ -28,6 +29,7 @@ export const lacrosse: SportConfig = {
     },
     {
       id: "turnovers",
+      pass: 2,
       label: "Turnovers",
       tier: "decent",
       source: "logged",
@@ -39,6 +41,7 @@ export const lacrosse: SportConfig = {
     },
     {
       id: "context",
+      pass: 1,
       label: "Defense type (man, zone, fast break)",
       tier: "decent",
       source: "logged",

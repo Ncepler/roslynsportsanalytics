@@ -17,6 +17,7 @@ export const basketball: SportConfig = {
     // Reliable, logged
     {
       id: "shots",
+      pass: 1,
       label: "Shot attempts and makes (2PT, 3PT, FT)",
       tier: "reliable",
       source: "logged",
@@ -27,6 +28,7 @@ export const basketball: SportConfig = {
     },
     {
       id: "context",
+      pass: 1,
       label: "Possession context (vs man, vs zone, fast break)",
       tier: "reliable",
       source: "logged",
@@ -37,6 +39,7 @@ export const basketball: SportConfig = {
     },
     {
       id: "turnovers",
+      pass: 2,
       label: "Turnovers",
       tier: "reliable",
       source: "logged",
@@ -47,6 +50,7 @@ export const basketball: SportConfig = {
     },
     {
       id: "fouls",
+      pass: 2,
       label: "Fouls",
       tier: "reliable",
       source: "logged",
@@ -74,6 +78,7 @@ export const basketball: SportConfig = {
     // Decent, logged (review recommended)
     {
       id: "turnover-type",
+      pass: 2,
       label: "Turnover type",
       tier: "decent",
       source: "logged",
@@ -82,9 +87,11 @@ export const basketball: SportConfig = {
       fields: ["turnoverType"],
       defaultOn: true,
     },
-    { id: "steals", label: "Steals", tier: "decent", source: "logged", description: "A defender takes the ball away.", events: ["steal"], sheets: ["offense-summary", "possession-log"], defaultOn: true },
+    { id: "steals",
+      pass: 2, label: "Steals", tier: "decent", source: "logged", description: "A defender takes the ball away.", events: ["steal"], sheets: ["offense-summary", "possession-log"], defaultOn: true },
     {
       id: "rebounds",
+      pass: 2,
       label: "Offensive and defensive rebounds",
       tier: "decent",
       source: "logged",
@@ -93,14 +100,42 @@ export const basketball: SportConfig = {
       sheets: ["offense-summary", "possession-log", "roslyn-offense"],
       defaultOn: true,
     },
-    { id: "assists", label: "Assists", tier: "decent", source: "logged", description: "The pass directly before a made field goal.", events: ["assist"], sheets: ["offense-summary", "possession-log", "roslyn-offense"], defaultOn: true },
-    { id: "blocks", label: "Blocks", tier: "decent", source: "logged", description: "A defender deflects a shot attempt.", events: ["block"], sheets: ["offense-summary", "possession-log"], defaultOn: true },
-    { id: "shot-type", label: "Shot type", tier: "decent", source: "logged", description: "For each field goal attempt: drive, catch-and-shoot, pull-up, post, putback, or other.", events: ["shot"], fields: ["shotType"], defaultOn: true },
-    { id: "shot-zone", label: "Shot zone", tier: "decent", source: "logged", description: "For each field goal attempt: paint, mid-range, corner 3, or above-the-break 3.", events: ["shot"], fields: ["shotZone"], defaultOn: true },
-    { id: "shooter", label: "Shooter jersey number", tier: "decent", source: "logged", description: "Jersey number of the player for each event, or null if you cannot read it.", fields: ["player"], defaultOn: true },
+    { id: "assists",
+      pass: 2, label: "Assists", tier: "decent", source: "logged", description: "The pass directly before a made field goal.", events: ["assist"], sheets: ["offense-summary", "possession-log", "roslyn-offense"], defaultOn: true },
+    { id: "blocks",
+      pass: 2, label: "Blocks", tier: "decent", source: "logged", description: "A defender deflects a shot attempt.", events: ["block"], sheets: ["offense-summary", "possession-log"], defaultOn: true },
+    { id: "shot-type",
+      pass: 1, label: "Shot type", tier: "decent", source: "logged", description: "For each field goal attempt: drive, catch-and-shoot, pull-up, post, putback, or other.", events: ["shot"], fields: ["shotType"], defaultOn: true },
+    { id: "shot-zone",
+      pass: 1, label: "Shot zone", tier: "decent", source: "logged", description: "For each field goal attempt: paint, mid-range, corner 3, or above-the-break 3.", events: ["shot"], fields: ["shotZone"], defaultOn: true },
+    { id: "shooter",
+      pass: 1, label: "Shooter jersey number", tier: "decent", source: "logged", description: "Jersey number of the player for each event, or null if you cannot read it.", fields: ["player"], defaultOn: true },
 
     // Experimental
-    { id: "contested", label: "Contested vs open shots", tier: "experimental", source: "logged", description: "For each field goal attempt: contested (a defender within arm's reach, hand up) or open.", events: ["shot"], fields: ["contested"], defaultOn: false },
+    { id: "contested",
+      pass: 1, label: "Contested vs open shots", tier: "experimental", source: "logged", description: "For each field goal attempt: contested (a defender within arm's reach, hand up) or open.", events: ["shot"], fields: ["contested"], defaultOn: false },
+    {
+      id: "plus-minus",
+      pass: 3,
+      label: "Plus/minus for the starters",
+      tier: "experimental",
+      source: "logged",
+      description:
+        "Every substitution for both teams: the jersey number coming in and going out (null if unreadable), at the moment it happens. The app works out who is on the court and the plus/minus from these.",
+      events: ["substitution"],
+      sheets: ["plus-minus"],
+      defaultOn: false,
+    },
+    {
+      id: "minutes",
+      pass: 3,
+      label: "Minutes on court for the starters",
+      tier: "experimental",
+      source: "logged",
+      description: "Every substitution for both teams (same as for plus/minus). Minutes come from the game clock; blank when the clock couldn't be read.",
+      events: ["substitution"],
+      defaultOn: false,
+    },
     { id: "possession-time", label: "Exact possession time", tier: "experimental", source: "derived", description: "Possession length from video time. Expect ±1–2 seconds at 1 frame per second.", sheets: ["possession-log"], defaultOn: false },
   ],
 };

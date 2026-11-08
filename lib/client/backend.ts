@@ -2,7 +2,7 @@
 // the app's API routes; the /test page swaps in a simulator (lib/demo).
 
 import type { PossessionLog } from "@/lib/gemini/log-types";
-import type { GameSetup } from "@/lib/gemini/prompt";
+import type { AppearanceResult, GameSetup } from "@/lib/gemini/prompt";
 import { api, deleteFromGemini, uploadToGemini, waitForActive, type GeminiFile } from "./api";
 import { runAppearanceNotes, runPossessionLog, type Resolution, type RunUsage } from "./run";
 import type { Range, Segment } from "./segments";
@@ -17,7 +17,7 @@ export type Backend = {
   deleteFile(name: string): Promise<unknown>;
   /** Real token count for a range, or null when unavailable. */
   countTokens(file: GeminiFile, range: Range, resolution: Resolution): Promise<number | null>;
-  appearance(range: Range, video: VideoOpts, setup: GameSetup, signal: AbortSignal): Promise<string>;
+  appearance(range: Range, video: VideoOpts, setup: GameSetup, signal: AbortSignal): Promise<AppearanceResult>;
   possessionLog(
     segments: Segment[],
     video: VideoOpts,

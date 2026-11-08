@@ -156,6 +156,17 @@
 }
 
 @layer components {
+  /* First completed analysis (rare delight): fades and settles in once, from scale(0.95), never scale(0). */
+  .first-moment {
+    animation: first-moment var(--duration-slow) var(--ease-out) both;
+  }
+  @keyframes first-moment {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+
   /* Buttons: press feedback on pointer-down (CLAUDE.md section 19). Only
      transform and colors transition; hover changes are pointer-gated. */
   .btn {

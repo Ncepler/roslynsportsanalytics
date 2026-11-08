@@ -44,3 +44,6 @@ next-env.d.ts
 # impeccable: platform engine binary (21MB) and local hook settings
 .claude/skills/impeccable/scripts/bin/
 .claude/settings.local.json
+
+# local test scripts and fixtures (never committed)
+/.scratch/

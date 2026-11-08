@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RunUsage } from "@/lib/client/run";
 import { formatTime } from "@/lib/client/time";
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/lib/derive";
 import type { Context, LogEvent, Possession, PossessionLog, Team } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
+import { plusMinus } from "@/lib/derive/plus-minus";
 import { allSheets, toCSV, toTSV, type Sheet } from "@/lib/sheets";
 import { CopyButton } from "./copy-button";
 
@@ -39,8 +40,13 @@ export function ReviewStep({
   usage,
   raw,
   playerNotes,
+  starters = [],
+  demo = false,
 }: {
+  demo?: boolean;
   playerNotes: { start: string; updates: string[] } | null;
+  /** Roslyn starters' numbers, for plus/minus and minutes. */
+  starters?: string[];
   log: PossessionLog;
   onLog: (l: PossessionLog) => void;
   setup: GameSetup;
@@ -53,7 +59,7 @@ export function ReviewStep({
   const checks = useMemo(() => scoreboardCheck(log), [log]);
   const flagged = flaggedQuarters(checks);
   const lax = setup.sportId === "lacrosse";
-  const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId), [log, setup.statIds, away, setup.sportId]);
+  const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId, starters), [log, setup.statIds, away, setup.sportId, starters]);
   const roslyn = summaryByContext(log, "roslyn").total;
   const opp = summaryByContext(log, "opponent").total;
 
@@ -66,6 +72,7 @@ export function ReviewStep({
 
   return (
     <div className="space-y-10">
+      <FirstAnalysisMoment demo={demo} />
       <ScoreboardBanner checks={checks} flagged={flagged} />
 
       {playerNotes && <PlayerNotesCheck notes={playerNotes} />}
@@ -90,6 +97,7 @@ export function ReviewStep({
           {on("by-quarter") && on("turnovers") && <QuarterTable title="Turnovers by quarter" data={turnoversByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("by-quarter") && on("fouls") && <QuarterTable title="Fouls by quarter" data={foulsByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {lax && on("defense") && on("context") && <DefenseTable log={log} />}
+          {!lax && (on("plus-minus") || on("minutes")) && <PlusMinusTable log={log} starters={starters} showPm={on("plus-minus")} showMinutes={on("minutes")} />}
           <TeamTable
             away={away}
             rows={[
@@ -121,7 +129,7 @@ export function ReviewStep({
         <p className="hint mt-1">Copy pastes straight into the matching cells of the club&apos;s Google Sheet. Blank means the stat wasn&apos;t tracked.</p>
         <div className="mt-4 space-y-8">
           {sheets.map((s) => (
-            <SheetPreview key={s.id} sheet={s} />
+            <SheetPreview key={s.id} sheet={s} fileStem={`${away} - ${s.id}`} />
           ))}
         </div>
       </section>
@@ -201,6 +209,99 @@ function switchTeam(p: Possession, team: Team): Possession {
   if (team === p.team) return p;
   const flip = (t: Team): Team => (t === "roslyn" ? "opponent" : "roslyn");
   return { ...p, team, events: p.events.map((e) => ({ ...e, team: flip(e.team) })) };
+}
+
+function PlusMinusTable({ log, starters, showPm, showMinutes }: { log: PossessionLog; starters: string[]; showPm: boolean; showMinutes: boolean }) {
+  if (starters.length === 0) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold">Starters</h3>
+        <p className="mt-2 text-sm text-muted">No starter numbers were entered, so plus/minus and minutes can&apos;t be worked out.</p>
+      </div>
+    );
+  }
+  const pm = plusMinus(log, starters);
+  const periods: ("1" | "2" | "3" | "4" | "OT")[] = pm.hadOT ? ["1", "2", "3", "4", "OT"] : ["1", "2", "3", "4"];
+  return (
+    <div className="overflow-x-auto">
+      <h3 className="text-sm font-semibold">Roslyn starters</h3>
+      <table className="mt-2 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border">
+            <th className={th}>Player</th>
+            {showPm && (
+              <>
+                <th className={`${th} text-right`}>+/-</th>
+                {periods.map((q) => (
+                  <th key={q} className={`${th} text-right`}>
+                    {q === "OT" ? "OT" : `Q${q}`}
+                  </th>
+                ))}
+              </>
+            )}
+            {showMinutes && <th className={`${th} text-right`}>Min</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {pm.rows.map((r) => (
+            <tr key={r.number} className="border-b border-border last:border-0">
+              <td className="px-3 py-2">#{r.number}</td>
+              {showPm && (
+                <>
+                  <td className={`${td} text-right font-semibold`}>{r.total > 0 ? `+${r.total}` : r.total}</td>
+                  {periods.map((q) => (
+                    <td key={q} className={`${td} text-right`}>
+                      {r.byPeriod[q]}
+                    </td>
+                  ))}
+                </>
+              )}
+              {showMinutes && <td className={`${td} text-right`}>{r.minutes === null ? "–" : r.minutes.toFixed(1)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="hint mt-2">
+        Long shot: needs every substitution seen correctly.
+        {pm.unknownSubs > 0 && ` ${pm.unknownSubs} substitution number${pm.unknownSubs === 1 ? " was" : "s were"} unreadable, so these may be off.`}
+        {showMinutes && pm.rows.some((r) => r.minutes === null) && " Minutes are blank because the game clock couldn't be read often enough."}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Delight, kept small and rare (section 19): the first completed analysis on
+ * this device gets a quiet check mark. Shown once; never again after that.
+ */
+function FirstAnalysisMoment({ demo }: { demo: boolean }) {
+  const key = demo ? "first-analysis-seen-demo" : "first-analysis-seen";
+  const [show] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return !localStorage.getItem(key);
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (!show) return;
+    try {
+      localStorage.setItem(key, "1");
+    } catch {
+      /* storage blocked: it may show again, which is harmless */
+    }
+  }, [show, key]);
+  if (!show) return null;
+  return (
+    <p className="first-moment flex items-center gap-2 font-medium" role="status">
+      <svg aria-hidden viewBox="0 0 20 20" className="size-5 text-accent" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="8.5" strokeWidth="1.6" />
+        <path d="M6.2 10.4l2.5 2.4 5-5.4" />
+      </svg>
+      First game analyzed.
+    </p>
+  );
 }
 
 function DefenseTable({ log }: { log: PossessionLog }) {
@@ -536,13 +637,14 @@ function PossessionRow({
   );
 }
 
-function SheetPreview({ sheet }: { sheet: Sheet }) {
+/** Downloads are named "<Opponent> - <sheet-id>.csv" so the Season tab can read them back as one game. */
+function SheetPreview({ sheet, fileStem }: { sheet: Sheet; fileStem: string }) {
   function download() {
     const blob = new Blob([toCSV(sheet)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${sheet.id}.csv`;
+    a.download = `${fileStem.replace(/[\\/:*?"<>|]/g, "")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
