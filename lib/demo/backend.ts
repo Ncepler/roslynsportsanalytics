@@ -8,7 +8,7 @@ import type { Backend } from "@/lib/client/backend";
 import { mergeLogs, type Range, type Segment } from "@/lib/client/segments";
 import { passesNeeded } from "@/lib/gemini/prompt";
 import { getSport } from "@/lib/sports";
-import { appearanceNotes, simulatedNoteUpdates, simulateGame, sliceForSegment } from "./simulate";
+import { appearanceNotes, simulatedNoteUpdates, simulatedStarters, simulateGame, sliceForSegment } from "./simulate";
 
 const DEMO_FILE: GeminiFile = { name: "files/simulated", uri: "simulated", mimeType: "video/mp4", state: "ACTIVE", error: null };
 
@@ -51,7 +51,11 @@ export function demoBackend(): Backend {
     async appearance(_range, _video, setup, signal) {
       await sleep(2500);
       check(signal);
-      return appearanceNotes(setup);
+      return {
+        notes: appearanceNotes(setup),
+        starters: simulatedStarters(setup),
+        scoreboard: { visible: true, quarter: true, clock: true, score: true },
+      };
     },
     async possessionLog(segments, _video, setup, signal, onSegmentDone) {
       const data = simulateGame(rangesFrom(segments), setup);

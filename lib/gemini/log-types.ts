@@ -6,7 +6,7 @@ export type Context = "M" | "Z" | "F";
 export type Confidence = "high" | "medium" | "low";
 
 export type LogEvent = {
-  type: "shot" | "rebound" | "assist" | "steal" | "block" | "turnover" | "foul";
+  type: "shot" | "rebound" | "assist" | "steal" | "block" | "turnover" | "foul" | "substitution";
   team: Team;
   /** Seconds from the start of the original video file. */
   videoTime: number;
@@ -24,6 +24,9 @@ export type LogEvent = {
   reboundType?: "offensive" | "defensive" | null;
   /** Turnovers only. */
   turnoverType?: string | null;
+  /** Substitutions only: jersey numbers, null when unreadable. */
+  playerIn?: string | null;
+  playerOut?: string | null;
   description: string;
 };
 

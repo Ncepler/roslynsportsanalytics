@@ -4,7 +4,7 @@
 
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { LogEvent, Possession } from "@/lib/gemini/log-types";
-import { passesNeeded, type GameSetup, type PossessionRef } from "@/lib/gemini/prompt";
+import { passesNeeded, type AppearanceResult, type GameSetup, type PossessionRef } from "@/lib/gemini/prompt";
 import { getSport } from "@/lib/sports";
 import { api, ApiError, sleep, type GeminiFile } from "./api";
 import { mergeLogs, MAX_PARALLEL, type Range, type Segment } from "./segments";
@@ -62,11 +62,18 @@ function parseJson<T>(text: string): T {
   }
 }
 
-/** Quick pass on the first couple of minutes: plain-text notes for the user to correct. */
-export async function runAppearanceNotes(range: Range, video: VideoOpts, setup: GameSetup, signal: AbortSignal): Promise<string> {
+const jerseys = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === "string" || typeof x === "number" ? String(x).replace(/^#/, "").trim() : "")) : []);
+
+/** Quick pass on the start of the game: starters' notes, their numbers, and whether the scoreboard reads. */
+export async function runAppearanceNotes(range: Range, video: VideoOpts, setup: GameSetup, signal: AbortSignal): Promise<AppearanceResult> {
   const r = await runOne("appearance", range, video, setup, signal);
-  const parsed = parseJson<{ notes?: unknown }>(r.text);
-  return Array.isArray(parsed.notes) ? parsed.notes.filter((n): n is string => typeof n === "string").join("\n") : "";
+  const parsed = parseJson<{ notes?: unknown; starters?: { roslyn?: unknown; opponent?: unknown }; scoreboard?: Record<string, unknown> }>(r.text);
+  const sb = parsed.scoreboard;
+  return {
+    notes: Array.isArray(parsed.notes) ? parsed.notes.filter((n): n is string => typeof n === "string").join("\n") : "",
+    starters: { roslyn: jerseys(parsed.starters?.roslyn), opponent: jerseys(parsed.starters?.opponent) },
+    scoreboard: sb ? { visible: sb.visible === true, quarter: sb.quarter === true, clock: sb.clock === true, score: sb.score === true } : null,
+  };
 }
 
 export type RunUsage = { inputTokens: number; outputTokens: number };

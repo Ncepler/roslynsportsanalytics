@@ -10,6 +10,15 @@ export type GameSetup = {
   statIds: string[];
   /** Corrected appearance notes, plain text. Lives only for this run. */
   appearanceNotes?: string;
+  /** Starters' jersey numbers, checked by the user (plus/minus needs who started). */
+  starters?: { roslyn: string[]; opponent: string[] };
+};
+
+/** What the starters request returns (section 6.1 scoreboard check folded in). */
+export type AppearanceResult = {
+  notes: string;
+  starters: { roslyn: string[]; opponent: string[] };
+  scoreboard: { visible: boolean; quarter: boolean; clock: boolean; score: boolean } | null;
 };
 
 const nullable = (type: string | string[], extra: Record<string, unknown> = {}) => ({
@@ -47,6 +56,10 @@ function eventProperties(sport: SportConfig, events: EventType[], fields: EventF
     made: nullable("boolean", { description: sport.id === "lacrosse" ? "Shots only: true if it was a goal." : "Shots only." }),
     description: { type: "string", description: "One short line describing what you saw." },
   };
+  if (events.includes("substitution")) {
+    eventProps.playerIn = nullable("string", { description: "Substitutions only: jersey number of the player coming in, or null if unreadable." });
+    eventProps.playerOut = nullable("string", { description: "Substitutions only: jersey number of the player going out, or null if unreadable." });
+  }
   if (events.includes("rebound")) eventProps.reboundType = nullable("string", { enum: ["offensive", "defensive", null] });
   if (fields.includes("shotType")) eventProps.shotType = nullable("string", { enum: ["drive", "catch-and-shoot", "pull-up", "post", "putback", "other", null] });
   if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: ["paint", "mid-range", "corner 3", "above-the-break 3", null] });
@@ -155,8 +168,25 @@ export const appearanceSchema = {
       description: 'One line per player, e.g. "Roslyn #5: white jersey, headband, tallest on court".',
       items: { type: "string" },
     },
+    starters: {
+      type: "object",
+      description: "Jersey numbers of the starters, as text. Use an empty string for a starter whose number you can't read.",
+      properties: { roslyn: { type: "array", items: { type: "string" } }, opponent: { type: "array", items: { type: "string" } } },
+      required: ["roslyn", "opponent"],
+    },
+    scoreboard: {
+      type: "object",
+      description: "Whether the scoreboard graphic is visible and each part is readable at this video quality.",
+      properties: {
+        visible: { type: "boolean" },
+        quarter: { type: "boolean", description: "Period/quarter readable" },
+        clock: { type: "boolean", description: "Game clock readable" },
+        score: { type: "boolean", description: "Both teams' scores readable" },
+      },
+      required: ["visible", "quarter", "clock", "score"],
+    },
   },
-  required: ["notes"],
+  required: ["notes", "starters", "scoreboard"],
 };
 
 export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }) {
@@ -168,6 +198,7 @@ export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: 
     `Watch from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s.`,
     "For each player: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
     "Do not describe faces. Do not guess names. If a jersey number is unreadable, say so.",
+    "Also list the starters' jersey numbers, and say whether the scoreboard is visible and whether its period, clock, and both scores are readable. Only say readable if you could actually read them.",
   ].join("\n");
 }
 
@@ -203,6 +234,9 @@ export function eventsPassPrompt(sport: SportConfig, setup: GameSetup, segment: 
     `You are adding detail to a ${sport.label.toLowerCase()} possession log that was already made from this video. Log what you SEE. Never guess.`,
     `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
     setup.appearanceNotes?.trim() ? `Player notes (checked by a person):\n${setup.appearanceNotes.trim()}` : "",
+    pass === 3 && setup.starters && (setup.starters.roslyn.length || setup.starters.opponent.length)
+      ? `Starters: Roslyn #${setup.starters.roslyn.join(", #") || "?"}; ${setup.awayName} #${setup.starters.opponent.join(", #") || "?"}.`
+      : "",
     `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s. Report every videoTime in seconds from the start of the FULL video file.`,
     "",
     "Possessions already logged (# · team · video seconds · quarter · clock):",

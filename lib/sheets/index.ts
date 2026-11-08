@@ -13,6 +13,7 @@ import {
   sumLines,
   type StatLine,
 } from "@/lib/derive";
+import { plusMinus } from "@/lib/derive/plus-minus";
 import type { PossessionLog, Team } from "@/lib/gemini/log-types";
 
 export type Cell = string | number | null;
@@ -140,7 +141,18 @@ export function laxDefense(log: PossessionLog, tracked: Tracked): Sheet {
   };
 }
 
-export function allSheets(log: PossessionLog, statIds: string[], awayName: string, sportId = "basketball"): Sheet[] {
+/** Basketball plus/minus (Long shots): rows are the starters; OT shows N/A when there was none. */
+export function plusMinusSheet(log: PossessionLog, starters: string[]): Sheet {
+  const pm = plusMinus(log, starters);
+  return {
+    id: "plus-minus",
+    title: "Basketball plus/minus (Roslyn starters)",
+    header: [[null, "Total +/-", "Q1", "Q2", "Q3", "Q4", "OT"]],
+    rows: pm.rows.map((r) => [`#${r.number}`, r.total, r.byPeriod["1"], r.byPeriod["2"], r.byPeriod["3"], r.byPeriod["4"], pm.hadOT ? r.byPeriod.OT : "N/A"]),
+  };
+}
+
+export function allSheets(log: PossessionLog, statIds: string[], awayName: string, sportId = "basketball", starters: string[] = []): Sheet[] {
   const tracked: Tracked = (id) => statIds.includes(id);
   if (sportId === "lacrosse") return [laxTurnovers(log, tracked, awayName || "Opponent"), laxDefense(log, tracked)];
   return [
@@ -149,6 +161,7 @@ export function allSheets(log: PossessionLog, statIds: string[], awayName: strin
     roslynOffenseTemplate(log, tracked),
     offenseSummary(log, "opponent", tracked, awayName || "Opponent"),
     possessionLogSheet(log, "opponent", tracked, awayName || "Opponent"),
+    ...(tracked("plus-minus") && starters.length ? [plusMinusSheet(log, starters)] : []),
   ];
 }
 

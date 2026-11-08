@@ -4,7 +4,7 @@
 export type Tier = "reliable" | "decent" | "experimental";
 
 /** Event kinds the AI can log inside a possession. */
-export type EventType = "shot" | "rebound" | "assist" | "steal" | "block" | "turnover" | "foul";
+export type EventType = "shot" | "rebound" | "assist" | "steal" | "block" | "turnover" | "foul" | "substitution";
 
 /** Optional event fields the AI fills only when a stat that needs them is checked. */
 export type EventField = "player" | "shotType" | "shotZone" | "turnoverType" | "contested";

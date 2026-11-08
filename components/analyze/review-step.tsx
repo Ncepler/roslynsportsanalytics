@@ -22,6 +22,7 @@ import {
 } from "@/lib/derive";
 import type { Context, LogEvent, Possession, PossessionLog, Team } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
+import { plusMinus } from "@/lib/derive/plus-minus";
 import { allSheets, toCSV, toTSV, type Sheet } from "@/lib/sheets";
 import { CopyButton } from "./copy-button";
 
@@ -39,8 +40,11 @@ export function ReviewStep({
   usage,
   raw,
   playerNotes,
+  starters = [],
 }: {
   playerNotes: { start: string; updates: string[] } | null;
+  /** Roslyn starters' numbers, for plus/minus and minutes. */
+  starters?: string[];
   log: PossessionLog;
   onLog: (l: PossessionLog) => void;
   setup: GameSetup;
@@ -53,7 +57,7 @@ export function ReviewStep({
   const checks = useMemo(() => scoreboardCheck(log), [log]);
   const flagged = flaggedQuarters(checks);
   const lax = setup.sportId === "lacrosse";
-  const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId), [log, setup.statIds, away, setup.sportId]);
+  const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId, starters), [log, setup.statIds, away, setup.sportId, starters]);
   const roslyn = summaryByContext(log, "roslyn").total;
   const opp = summaryByContext(log, "opponent").total;
 
@@ -90,6 +94,7 @@ export function ReviewStep({
           {on("by-quarter") && on("turnovers") && <QuarterTable title="Turnovers by quarter" data={turnoversByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("by-quarter") && on("fouls") && <QuarterTable title="Fouls by quarter" data={foulsByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {lax && on("defense") && on("context") && <DefenseTable log={log} />}
+          {!lax && (on("plus-minus") || on("minutes")) && <PlusMinusTable log={log} starters={starters} showPm={on("plus-minus")} showMinutes={on("minutes")} />}
           <TeamTable
             away={away}
             rows={[
@@ -201,6 +206,65 @@ function switchTeam(p: Possession, team: Team): Possession {
   if (team === p.team) return p;
   const flip = (t: Team): Team => (t === "roslyn" ? "opponent" : "roslyn");
   return { ...p, team, events: p.events.map((e) => ({ ...e, team: flip(e.team) })) };
+}
+
+function PlusMinusTable({ log, starters, showPm, showMinutes }: { log: PossessionLog; starters: string[]; showPm: boolean; showMinutes: boolean }) {
+  if (starters.length === 0) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold">Starters</h3>
+        <p className="mt-2 text-sm text-muted">No starter numbers were entered, so plus/minus and minutes can&apos;t be worked out.</p>
+      </div>
+    );
+  }
+  const pm = plusMinus(log, starters);
+  const periods: ("1" | "2" | "3" | "4" | "OT")[] = pm.hadOT ? ["1", "2", "3", "4", "OT"] : ["1", "2", "3", "4"];
+  return (
+    <div className="overflow-x-auto">
+      <h3 className="text-sm font-semibold">Roslyn starters</h3>
+      <table className="mt-2 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border">
+            <th className={th}>Player</th>
+            {showPm && (
+              <>
+                <th className={`${th} text-right`}>+/-</th>
+                {periods.map((q) => (
+                  <th key={q} className={`${th} text-right`}>
+                    {q === "OT" ? "OT" : `Q${q}`}
+                  </th>
+                ))}
+              </>
+            )}
+            {showMinutes && <th className={`${th} text-right`}>Min</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {pm.rows.map((r) => (
+            <tr key={r.number} className="border-b border-border last:border-0">
+              <td className="px-3 py-2">#{r.number}</td>
+              {showPm && (
+                <>
+                  <td className={`${td} text-right font-semibold`}>{r.total > 0 ? `+${r.total}` : r.total}</td>
+                  {periods.map((q) => (
+                    <td key={q} className={`${td} text-right`}>
+                      {r.byPeriod[q]}
+                    </td>
+                  ))}
+                </>
+              )}
+              {showMinutes && <td className={`${td} text-right`}>{r.minutes === null ? "–" : r.minutes.toFixed(1)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="hint mt-2">
+        Long shot: needs every substitution seen correctly.
+        {pm.unknownSubs > 0 && ` ${pm.unknownSubs} substitution number${pm.unknownSubs === 1 ? " was" : "s were"} unreadable, so these may be off.`}
+        {showMinutes && pm.rows.some((r) => r.minutes === null) && " Minutes are blank because the game clock couldn't be read often enough."}
+      </p>
+    </div>
+  );
 }
 
 function DefenseTable({ log }: { log: PossessionLog }) {

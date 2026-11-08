@@ -114,6 +114,28 @@ export const basketball: SportConfig = {
     // Experimental
     { id: "contested",
       pass: 1, label: "Contested vs open shots", tier: "experimental", source: "logged", description: "For each field goal attempt: contested (a defender within arm's reach, hand up) or open.", events: ["shot"], fields: ["contested"], defaultOn: false },
+    {
+      id: "plus-minus",
+      pass: 3,
+      label: "Plus/minus for the starters",
+      tier: "experimental",
+      source: "logged",
+      description:
+        "Every substitution for both teams: the jersey number coming in and going out (null if unreadable), at the moment it happens. The app works out who is on the court and the plus/minus from these.",
+      events: ["substitution"],
+      sheets: ["plus-minus"],
+      defaultOn: false,
+    },
+    {
+      id: "minutes",
+      pass: 3,
+      label: "Minutes on court for the starters",
+      tier: "experimental",
+      source: "logged",
+      description: "Every substitution for both teams (same as for plus/minus). Minutes come from the game clock; blank when the clock couldn't be read.",
+      events: ["substitution"],
+      defaultOn: false,
+    },
     { id: "possession-time", label: "Exact possession time", tier: "experimental", source: "derived", description: "Possession length from video time. Expect ±1–2 seconds at 1 frame per second.", sheets: ["possession-log"], defaultOn: false },
   ],
 };

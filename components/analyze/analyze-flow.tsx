@@ -58,6 +58,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const [log, setLog] = useState<PossessionLog | null>(null);
   /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
   const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
+  /** Roslyn starters the user confirmed (plus/minus). Lives only for this run. */
+  const [starterNumbers, setStarterNumbers] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
@@ -220,20 +222,25 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
-      const notes = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
+      const appearance = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
       // Pause for the user to correct the notes; continueRun picks up from here.
-      setRun({ phase: "notes", notes, started });
+      setRun({ phase: "notes", appearance, started });
     } catch (err) {
       failRun(err, ctrl);
     }
   }
 
-  async function continueRun(confirmedNotes: string) {
+  async function continueRun(confirmedNotes: string, starters: { roslyn: string[]; opponent: string[] }) {
     const ctrl = runAbort.current ?? new AbortController();
     const started = run.phase === "notes" ? run.started : now();
     try {
       const gfile = readyFile!;
-      const runSetup: GameSetup = { ...setup, appearanceNotes: confirmedNotes };
+      const runSetup: GameSetup = {
+        ...setup,
+        appearanceNotes: confirmedNotes,
+        starters: { roslyn: starters.roslyn.filter(Boolean), opponent: starters.opponent.filter(Boolean) },
+      };
+      setStarterNumbers(starters.roslyn.filter(Boolean));
       setRun({ phase: "logging", done: 0, total: segments.length * passCount, started });
       const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
@@ -354,6 +361,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             run={run}
             onAnalyze={analyze}
             onContinue={continueRun}
+            starterBoxes={setup.statIds.includes("plus-minus") ? (getSport(setup.sportId)?.playersPerSide ?? 0) : 0}
+            awayName={setup.awayName || "Opponent"}
             onCancel={cancelRun}
             onBack={() => go(2)}
             demo={demo}
@@ -366,7 +375,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>
