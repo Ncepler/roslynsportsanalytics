@@ -15,6 +15,8 @@ type PollResult =
   | { status: "done"; text: string; inputTokens: number | null; outputTokens: number | null };
 
 const POLL_MS = 4000;
+/** One part of the game should never take this long; stop polling instead of waiting forever. */
+const RUN_TIMEOUT_MS = 30 * 60 * 1000;
 
 type VideoOpts = { file: GeminiFile; resolution: Resolution; fps?: number };
 
@@ -31,8 +33,10 @@ async function runOne(kind: "log" | "appearance", range: Range, video: VideoOpts
       setup,
     },
   });
+  const giveUpAt = Date.now() + RUN_TIMEOUT_MS;
   for (;;) {
     if (signal.aborted) throw new ApiError("Cancelled.", 0);
+    if (Date.now() > giveUpAt) throw new ApiError("The analysis took too long and was stopped. Try again, or trim the video shorter.", 0);
     await sleep(POLL_MS);
     const r = await api<PollResult>(`/api/gemini/analyze/${encodeURIComponent(id)}`);
     if (r.status === "done") return r;
@@ -64,8 +68,8 @@ export async function runPossessionLog(
   setup: GameSetup,
   signal: AbortSignal,
   onSegmentDone: (done: number, total: number) => void,
-): Promise<{ log: PossessionLog; usage: RunUsage; raw: string[] }> {
-  const results: { segment: Segment; log: PossessionLog; text: string }[] = new Array(segments.length);
+): Promise<{ log: PossessionLog; usage: RunUsage; raw: string[]; noteUpdates: string[] }> {
+  const results: { segment: Segment; log: PossessionLog; text: string; noteUpdates: string[] }[] = new Array(segments.length);
   const usage: RunUsage = { inputTokens: 0, outputTokens: 0 };
   let next = 0;
   let done = 0;
@@ -74,10 +78,11 @@ export async function runPossessionLog(
     while (next < segments.length) {
       const i = next++;
       const r = await runOne("log", segments[i].watch, video, setup, signal);
-      const parsed = parseJson<Partial<PossessionLog>>(r.text);
+      const parsed = parseJson<Partial<PossessionLog> & { playerNoteUpdates?: unknown }>(r.text);
       results[i] = {
         segment: segments[i],
         text: r.text,
+        noteUpdates: Array.isArray(parsed.playerNoteUpdates) ? parsed.playerNoteUpdates.filter((n): n is string => typeof n === "string") : [],
         log: {
           possessions: Array.isArray(parsed.possessions) ? parsed.possessions : [],
           scoreboard: Array.isArray(parsed.scoreboard) ? parsed.scoreboard : [],
@@ -91,5 +96,7 @@ export async function runPossessionLog(
   }
 
   await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL, segments.length) }, worker));
-  return { log: mergeLogs(results), usage, raw: results.map((r) => r.text) };
+  // Segments run in parallel, so each reports what changed in its stretch; keep them in game order.
+  const noteUpdates = [...new Set(results.flatMap((r) => r.noteUpdates))];
+  return { log: mergeLogs(results), usage, raw: results.map((r) => r.text), noteUpdates };
 }

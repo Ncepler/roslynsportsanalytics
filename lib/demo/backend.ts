@@ -6,7 +6,7 @@
 import { ApiError, sleep, type GeminiFile } from "@/lib/client/api";
 import type { Backend } from "@/lib/client/backend";
 import { mergeLogs, type Range, type Segment } from "@/lib/client/segments";
-import { appearanceNotes, simulateGame, sliceForSegment } from "./simulate";
+import { appearanceNotes, simulatedNoteUpdates, simulateGame, sliceForSegment } from "./simulate";
 
 const DEMO_FILE: GeminiFile = { name: "files/simulated", uri: "simulated", mimeType: "video/mp4", state: "ACTIVE", error: null };
 
@@ -68,6 +68,7 @@ export function demoBackend(): Backend {
         log,
         usage: { inputTokens: Math.round(watched * 100), outputTokens: log.possessions.length * 140 },
         raw: parts.map((p) => JSON.stringify(p.log, null, 2)),
+        noteUpdates: simulatedNoteUpdates(setup),
       };
     },
   };

@@ -314,7 +314,12 @@ export function appearanceNotes(setup: GameSetup): string {
   const r = roster(setup.roslynRoster, lax ? DEFAULT_LAX_ROSLYN : DEFAULT_ROSLYN);
   const a = roster(setup.awayRoster, lax ? DEFAULT_LAX_AWAY : DEFAULT_AWAY);
   const rand = mulberry32(hash(setup.awayName + setup.sportId));
-  const feature = () => FEATURES[Math.floor(rand() * FEATURES.length)];
+  // A shuffled copy per team so no two players on a team share a feature.
+  const shuffled = () => [...FEATURES].sort(() => rand() - 0.5);
+  const featureLists = [shuffled(), shuffled()];
+  let team = 0;
+  let k = 0;
+  const feature = () => featureLists[team][k++ % FEATURES.length];
   const posLax = ["goalie", "defense", "defense", "defense", "midfield", "midfield", "midfield", "attack", "attack", "attack"];
   const posBb = ["usually brings the ball up", "plays on the wing", "plays on the wing", "plays near the basket", "plays near the basket"];
   const line = (team: string, color: string, num: string | undefined, i: number) =>
@@ -322,8 +327,26 @@ export function appearanceNotes(setup: GameSetup): string {
       ? `${team}: one player's number (${feature()}) was never readable.`
       : `${team} #${num}: ${color} jersey, ${feature()}, ${lax ? posLax[i] : posBb[i]}.`;
   const away = setup.awayName || "Opponent";
+  const ours = Array.from({ length: n }, (_, i) => line("Roslyn", setup.roslynColor || "home", r[i], i));
+  team = 1;
+  k = 0;
+  const theirs = Array.from({ length: n }, (_, i) => line(away, setup.awayColor || "away", a[i], i));
+  return [...ours, ...theirs].join("\n");
+}
+
+/** What the AI would add to the notes while watching: substitutes and late-read numbers. */
+export function simulatedNoteUpdates(setup: GameSetup): string[] {
+  const lax = setup.sportId === "lacrosse";
+  const away = setup.awayName || "Opponent";
+  const ours = setup.roslynColor || "home";
+  const theirs = setup.awayColor || "away";
+  const bench = lax ? ["27", "31", "36"] : ["20", "24", "33"];
+  const awayBench = lax ? ["25", "29", "40"] : ["12", "15", "30"];
   return [
-    ...Array.from({ length: n }, (_, i) => line("Roslyn", setup.roslynColor || "home", r[i], i)),
-    ...Array.from({ length: n }, (_, i) => line(away, setup.awayColor || "away", a[i], i)),
-  ].join("\n");
+    `Roslyn #${bench[0]} came in for the first time: ${ours} jersey, knee brace, ${lax ? "midfield" : "plays on the wing"}.`,
+    `${away} #${awayBench[0]} came in: ${theirs} jersey, long sleeves, ${lax ? "midfield" : "plays near the basket"}.`,
+    `${away}: the player whose number was unreadable is #${awayBench[1]}.`,
+    `Roslyn #${bench[1]} came in: ${ours} jersey, white shoes, ${lax ? "long-stick defense" : "usually brings the ball up"}.`,
+    `${away} #${awayBench[2]} came in late in the game: ${theirs} jersey, taped fingers.`,
+  ];
 }

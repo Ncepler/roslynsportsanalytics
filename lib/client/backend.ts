@@ -24,7 +24,7 @@ export type Backend = {
     setup: GameSetup,
     signal: AbortSignal,
     onSegmentDone: (done: number, total: number) => void,
-  ): Promise<{ log: PossessionLog; usage: RunUsage; raw: string[] }>;
+  ): Promise<{ log: PossessionLog; usage: RunUsage; raw: string[]; noteUpdates: string[] }>;
 };
 
 export const realBackend: Backend = {

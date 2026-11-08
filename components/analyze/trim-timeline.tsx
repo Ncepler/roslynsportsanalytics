@@ -26,9 +26,12 @@ export function TrimTimeline({
   value,
   onChange,
   skips,
+  marker = null,
   currentTime,
   onSeek,
 }: {
+  /** A break start the user has marked but not finished: drawn as a solid line. */
+  marker?: number | null;
   duration: number;
   value: Range;
   onChange: (next: Range) => void;
@@ -173,10 +176,19 @@ export function TrimTimeline({
         {skips.map((s, i) => (
           <div
             key={i}
-            className="pointer-events-none absolute inset-y-2 rounded bg-[repeating-linear-gradient(135deg,oklch(from_var(--text)_l_c_h/0.18)_0_4px,transparent_4px_8px)]"
-            style={{ left: toPx(s.start), width: Math.max(2, toPx(s.end) - toPx(s.start)) }}
+            title={`Break skipped: ${formatTime(s.start)}–${formatTime(s.end)}`}
+            className="pointer-events-none absolute inset-y-0 border-x-2 border-[var(--break)] bg-[repeating-linear-gradient(135deg,oklch(from_var(--break)_l_c_h/0.35)_0_4px,transparent_4px_8px)]"
+            style={{ left: toPx(s.start), width: Math.max(4, toPx(s.end) - toPx(s.start)) }}
           />
         ))}
+        {/* Break start the user just marked */}
+        {marker !== null && (
+          <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-[var(--break)]" style={{ transform: `translateX(${toPx(marker) - 1}px)` }}>
+            <span className="absolute left-1.5 top-1 whitespace-nowrap rounded bg-[var(--break)] px-1.5 py-0.5 text-[0.6875rem] font-semibold text-white">
+              Break starts
+            </span>
+          </div>
+        )}
         {/* Playhead */}
         <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-text" style={{ transform: `translateX(${toPx(currentTime) - 1}px)` }} />
         {(["start", "end"] as const).map((handle) => {

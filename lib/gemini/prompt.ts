@@ -88,8 +88,14 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
         },
       },
       warnings: { type: "array", items: { type: "string" } },
+      playerNoteUpdates: {
+        type: "array",
+        description:
+          'Changes to the player notes you noticed in this section, one line each, e.g. "Roslyn #12 came in for #5: white jersey, knee brace" or "Opponent player with the headband is #22". Empty if nothing changed.',
+        items: { type: "string" },
+      },
     },
-    required: ["possessions", "scoreboard", "warnings"],
+    required: ["possessions", "scoreboard", "warnings", "playerNoteUpdates"],
   };
 }
 
@@ -103,7 +109,8 @@ export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segmen
     "Teams:",
     `- "roslyn": Roslyn, wearing ${setup.roslynColor}. ${roster("Roslyn", setup.roslynRoster)}`,
     `- "opponent": ${setup.awayName}, wearing ${setup.awayColor}. ${roster(setup.awayName, setup.awayRoster)}`,
-    setup.appearanceNotes?.trim() ? `\nPlayer appearance notes (from earlier in this game):\n${setup.appearanceNotes.trim()}` : "",
+    setup.appearanceNotes?.trim() ? `\nPlayer appearance notes (the starters, checked by a person):\n${setup.appearanceNotes.trim()}` : "",
+    "Keep these notes up to date as you watch: in playerNoteUpdates, add a line for each substitute who comes in (team, number, features, who they replaced if clear) and any number you can now read that the notes had as unreadable.",
     "",
     `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s of the video. Report every videoTime in seconds from the start of the FULL video file, not from the start of this section.`,
     "",
@@ -141,10 +148,10 @@ export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: 
   const n = sport.playersPerSide;
   return [
     `Watch this stretch of a high school ${sport.label.toLowerCase()} game and write short notes that would help someone tell the players apart later in the same video.`,
-    `Describe up to ${n} players for each team (the ${n} on the ${sport.id === "basketball" ? "court" : "field"} for each side): ${n} lines for Roslyn, then ${n} for the opponent.`,
+    `Describe every starter: the ${n} players on the ${sport.surface} for each team at the start. Write exactly ${n} lines for Roslyn, then ${n} for the opponent, even if a number is unreadable.`,
     `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
     `Watch from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s.`,
-    "For each player you can see clearly: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
+    "For each player: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
     "Do not describe faces. Do not guess names. If a jersey number is unreadable, say so.",
   ].join("\n");
 }
