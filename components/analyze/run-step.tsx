@@ -92,12 +92,21 @@ export function RunStep({
   if (run.phase === "notes") {
     return (
       <div className="max-w-2xl">
-        <h2 className="text-xl font-semibold tracking-[-0.01em]">Check the player notes</h2>
+        <h2 className="text-xl font-semibold tracking-[-0.01em]">Check the starters</h2>
         <p className="mt-1 text-muted">
-          The AI watched the first couple of minutes. Fix anything wrong (jersey numbers especially). These notes are sent
-          with each part of the analysis and thrown away after this run.
+          The AI watched the start of the game and described every starter. Fix anything wrong, especially jersey numbers.
         </p>
-        <textarea className="field mt-4 min-h-48 font-[inherit]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <p role="note" className="mt-3 rounded-[0.625rem] border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-text">
+          <span className="font-semibold">You&apos;ll check again at the end.</span> The AI keeps these notes up to date as it watches (substitutes,
+          numbers it reads later), so come back and check the updated notes on the results page.
+        </p>
+        <textarea
+          className="field mt-4 min-h-64 font-[inherit]"
+          value={notes}
+          aria-label="Player notes"
+          onChange={(e) => setNotes(e.target.value)}
+        />
+        <p className="hint mt-2">These notes are used only for this run, then thrown away.</p>
         <div className="mt-4 flex gap-2">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
@@ -117,12 +126,12 @@ export function RunStep({
       {!running && (
         <>
           <fieldset className="mt-6">
-            <legend className="label">Video detail</legend>
+            <legend className="label">How closely should the AI watch?</legend>
             <div className="mt-1 grid gap-2 sm:grid-cols-2">
               {(
                 [
-                  ["low", "Standard", "Cheaper. Scoreboard digits and jersey numbers may be hard to read."],
-                  ["high", "High detail", "About 3× the cost. Better for jersey numbers."],
+                  ["low", "Standard (recommended)", "Like watching on a phone. Fine for shots, turnovers, and the score. Might miss small jersey numbers."],
+                  ["high", "High detail", "Like watching on a big TV. Reads jersey numbers and the scoreboard better. Takes longer and uses more of the club's AI budget."],
                 ] as const
               ).map(([value, title, desc]) => (
                 <label

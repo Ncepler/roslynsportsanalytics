@@ -30,6 +30,8 @@
   --warning-text: oklch(0.4 0.08 70);
   --warning-border: oklch(0.86 0.08 85);
   --danger: oklch(0.52 0.18 27);
+  /* Skipped breaks on the trim slider */
+  --break: oklch(0.6 0.16 55);
 
   /* Translucent header material */
   --header-bg: oklch(0.985 0.002 var(--accent-hue) / 0.72);
@@ -65,6 +67,7 @@
     --warning-text: oklch(0.88 0.08 85);
     --warning-border: oklch(0.4 0.06 75);
     --danger: oklch(0.72 0.15 27);
+    --break: oklch(0.72 0.14 60);
 
     --header-bg: oklch(0.17 0.006 var(--accent-hue) / 0.72);
   }

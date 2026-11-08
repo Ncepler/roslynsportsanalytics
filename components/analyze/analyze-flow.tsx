@@ -55,6 +55,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const [resolution, setResolution] = useState<Resolution>("low");
   const [run, setRun] = useState<RunState>({ phase: "idle" });
   const [log, setLog] = useState<PossessionLog | null>(null);
+  /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
+  const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
@@ -66,6 +68,52 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     setStep(s);
     setReachable((r) => (s > r ? s : r));
   }, []);
+
+  /** Changing the trim or setup after a run makes the results stale: drop them. */
+  function invalidateResults() {
+    if (!log) return;
+    setLog(null);
+    setNotes(null);
+    setRun({ phase: "idle" });
+    setReachable((r) => (r > 3 ? 3 : r));
+  }
+
+  function changeTrim(next: TrimState) {
+    // While dragging a handle, show that frame so the user sees where the game starts or ends.
+    const v = videoRef.current;
+    if (v && next.range.start !== trim.range.start) {
+      v.pause();
+      v.currentTime = next.range.start;
+    } else if (v && next.range.end !== trim.range.end) {
+      v.pause();
+      v.currentTime = next.range.end;
+    }
+    invalidateResults();
+    setTrim(next);
+  }
+
+  function changeSetup(next: GameSetup) {
+    invalidateResults();
+    setSetup(next);
+  }
+
+  /**
+   * Keep playback inside the trimmed game: nothing before the start or after
+   * the end can be watched. On Review, skipped breaks are jumped over too.
+   */
+  function clampPlayback(v: HTMLVideoElement) {
+    const { start, end } = trim.range;
+    if (end <= start) return;
+    const t = v.currentTime;
+    if (t < start - 0.05) v.currentTime = start;
+    else if (t > end + 0.05 || (t >= end && !v.paused)) {
+      v.pause();
+      v.currentTime = end;
+    } else if (step === 4) {
+      const inBreak = trim.skips.find((b) => t >= b.start && t < b.end);
+      if (inBreak) v.currentTime = Math.min(end, inBreak.end);
+    }
+  }
 
   // ---------- upload (starts immediately, runs in the background) ----------
   const startUpload = useCallback(async (f: File) => {
@@ -177,12 +225,12 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     }
   }
 
-  async function continueRun(notes: string) {
+  async function continueRun(confirmedNotes: string) {
     const ctrl = runAbort.current ?? new AbortController();
     const started = run.phase === "notes" ? run.started : now();
     try {
       const gfile = readyFile!;
-      const runSetup: GameSetup = { ...setup, appearanceNotes: notes };
+      const runSetup: GameSetup = { ...setup, appearanceNotes: confirmedNotes };
       setRun({ phase: "logging", done: 0, total: segments.length, started });
       const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
@@ -192,6 +240,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       if (backend.calibrates) recordRunSpeed((now() - started) / 1000, longest);
       setRun({ phase: "building" });
       setLog(result.log);
+      setNotes({ start: confirmedNotes, updates: result.noteUpdates });
       setRun({ phase: "done", usage: result.usage, raw: result.raw });
       await cleanupGemini();
       go(4);
@@ -219,9 +268,10 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   }
 
   function seek(t: number) {
+    const clamped = trim.range.end > trim.range.start ? Math.min(trim.range.end, Math.max(trim.range.start, t)) : t;
     const v = videoRef.current;
-    if (v) v.currentTime = t;
-    setCurrentTime(t);
+    if (v) v.currentTime = clamped;
+    setCurrentTime(clamped);
   }
 
   const showVideo = videoUrl && (step === 1 || step === 4);
@@ -255,7 +305,12 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
               }
             }}
             onError={() => setPlayable(false)}
-            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+            onTimeUpdate={(e) => {
+              clampPlayback(e.currentTarget);
+              setCurrentTime(e.currentTarget.currentTime);
+            }}
+            onSeeking={(e) => clampPlayback(e.currentTarget)}
+            onPlay={(e) => clampPlayback(e.currentTarget)}
           />
         </div>
       )}
@@ -269,7 +324,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
               canPreview={playable || !videoUrl}
               hasPlayhead={Boolean(videoUrl) && playable}
               trim={trim}
-              onTrim={setTrim}
+              onTrim={changeTrim}
               currentTime={currentTime}
               onSeek={seek}
               onBack={() => go(0)}
@@ -283,7 +338,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             )}
           </>
         )}
-        {step === 2 && <SetupStep setup={setup} onChange={setSetup} onBack={() => go(1)} onNext={() => go(3)} />}
+        {step === 2 && <SetupStep setup={setup} onChange={changeSetup} onBack={() => go(1)} onNext={() => go(3)} />}
         {step === 3 && (
           <RunStep
             keptSeconds={keptSeconds}
@@ -307,7 +362,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={setLog} setup={setup} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>

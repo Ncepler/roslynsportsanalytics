@@ -62,14 +62,23 @@ export function TrimStep({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const setRange = (range: Range) => onTrim({ ...trim, range });
+  // Breaks that fall outside a new trim are trimmed to fit (or dropped).
+  const setRange = (range: Range) =>
+    onTrim({
+      ...trim,
+      range,
+      skips: trim.skips
+        .map((b) => ({ start: Math.max(b.start, range.start), end: Math.min(b.end, range.end) }))
+        .filter((b) => b.end - b.start >= 5),
+    });
+  const [pendingStart, setPendingStart] = useState<number | null>(null);
   const valid = trim.range.end - trim.range.start >= 5 && (duration === null || trim.range.end <= duration + 0.5);
 
   return (
     <div>
       {duration !== null && canPreview ? (
         <div>
-          <TrimTimeline duration={duration} value={trim.range} onChange={setRange} skips={trim.skips} currentTime={currentTime} onSeek={onSeek} />
+          <TrimTimeline duration={duration} value={trim.range} onChange={setRange} skips={trim.skips} marker={pendingStart} currentTime={currentTime} onSeek={onSeek} />
         </div>
       ) : (
         <p className="rounded-[0.625rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
@@ -89,7 +98,7 @@ export function TrimStep({
         <TimeField label="Game ends at" value={trim.range.end} max={duration ?? undefined} onCommit={(t) => setRange({ ...trim.range, end: Math.max(t, trim.range.start + 5) })} />
       </div>
 
-      <Breaks trim={trim} onTrim={onTrim} currentTime={currentTime} canPreview={hasPlayhead} duration={duration} />
+      <Breaks trim={trim} onTrim={onTrim} currentTime={currentTime} canPreview={hasPlayhead} pendingStart={pendingStart} setPendingStart={setPendingStart} />
 
       <div className="mt-8 flex gap-2">
         <button type="button" className="btn btn-ghost" onClick={onBack}>
@@ -112,21 +121,38 @@ function Breaks({
   onTrim,
   currentTime,
   canPreview,
-  duration,
+  pendingStart,
+  setPendingStart,
 }: {
   trim: TrimState;
   onTrim: (t: TrimState) => void;
   currentTime: number;
   canPreview: boolean;
-  duration: number | null;
+  pendingStart: number | null;
+  setPendingStart: (t: number | null) => void;
 }) {
-  const [pendingStart, setPendingStart] = useState<number | null>(null);
-  const [typed, setTyped] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [typed, setTyped] = useState<{ start: number; end: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { start: gameStart, end: gameEnd } = trim.range;
+
+  /** Why a break can't be added, or null when it's fine. Never negative, always inside the game. */
+  function problem(start: number, end: number): string | null {
+    if (start < gameStart) return `A break can't start before the game starts (${formatTime(gameStart)}).`;
+    if (end > gameEnd) return `A break can't end after the game ends (${formatTime(gameEnd)}).`;
+    if (end <= start) return "The game has to resume after the break starts.";
+    if (end - start < 5) return "A break has to be at least 5 seconds long.";
+    if (trim.skips.some((b) => start < b.end && end > b.start)) return "That overlaps a break you already added.";
+    return null;
+  }
 
   const add = (start: number, end: number) => {
-    if (end - start < 5) return;
+    const p = problem(start, end);
+    setError(p);
+    if (p) return false;
     onTrim({ ...trim, skips: [...trim.skips, { start, end }].sort((a, b) => a.start - b.start) });
+    return true;
   };
+  const inGame = currentTime >= gameStart && currentTime <= gameEnd;
 
   return (
     <section className="mt-8 border-t border-border pt-6">
@@ -136,7 +162,15 @@ function Breaks({
       {canPreview && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {pendingStart === null ? (
-            <button type="button" className="btn btn-secondary text-sm" onClick={() => setPendingStart(currentTime)}>
+            <button
+              type="button"
+              className="btn btn-secondary text-sm"
+              disabled={!inGame}
+              onClick={() => {
+                setError(null);
+                setPendingStart(currentTime);
+              }}
+            >
               Break starts here <span className="text-muted tabular-nums">({formatTime(currentTime)})</span>
             </button>
           ) : (
@@ -147,13 +181,19 @@ function Breaks({
                 className="btn btn-primary text-sm"
                 disabled={currentTime - pendingStart < 5}
                 onClick={() => {
-                  add(pendingStart, currentTime);
-                  setPendingStart(null);
+                  if (add(pendingStart, currentTime)) setPendingStart(null);
                 }}
               >
                 Game resumes here <span className="tabular-nums opacity-80">({formatTime(currentTime)})</span>
               </button>
-              <button type="button" className="btn btn-ghost text-sm" onClick={() => setPendingStart(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost text-sm"
+                onClick={() => {
+                  setPendingStart(null);
+                  setError(null);
+                }}
+              >
                 Cancel
               </button>
             </>
@@ -162,7 +202,14 @@ function Breaks({
       )}
       {canPreview && (
         <p className="hint mt-2">
-          {pendingStart === null ? "Play or drag the video to where the break starts, then press the button." : "Now play or drag the video to where the game starts again."}
+          {pendingStart === null
+            ? "Play or drag the video to where the break starts, then press the button."
+            : "The orange line on the slider marks where the break starts. Now play or drag the video to where the game starts again."}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
         </p>
       )}
 
@@ -185,12 +232,17 @@ function Breaks({
         <summary className="cursor-pointer text-sm text-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-text">{canPreview ? "Type the times instead" : "Type the break times"}</summary>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="w-32">
-            <TimeField label="Break starts" value={typed.start} max={duration ?? undefined} onCommit={(t) => setTyped((x) => ({ ...x, start: t }))} />
+            <TimeField label="Break starts" value={typed?.start ?? gameStart} max={gameEnd} onCommit={(t) => setTyped({ start: t, end: typed?.end ?? gameStart })} />
           </div>
           <div className="w-32">
-            <TimeField label="Game resumes" value={typed.end} max={duration ?? undefined} onCommit={(t) => setTyped((x) => ({ ...x, end: t }))} />
+            <TimeField label="Game resumes" value={typed?.end ?? gameStart} max={gameEnd} onCommit={(t) => setTyped({ start: typed?.start ?? gameStart, end: t })} />
           </div>
-          <button type="button" className="btn btn-secondary text-sm" disabled={typed.end - typed.start < 5} onClick={() => add(typed.start, typed.end)}>
+          <button
+            type="button"
+            className="btn btn-secondary text-sm"
+            disabled={!typed}
+            onClick={() => typed && add(typed.start, typed.end) && setTyped(null)}
+          >
             Skip this break
           </button>
         </div>

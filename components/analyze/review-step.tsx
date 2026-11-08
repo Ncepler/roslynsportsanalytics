@@ -38,7 +38,9 @@ export function ReviewStep({
   onSeek,
   usage,
   raw,
+  playerNotes,
 }: {
+  playerNotes: { start: string; updates: string[] } | null;
   log: PossessionLog;
   onLog: (l: PossessionLog) => void;
   setup: GameSetup;
@@ -65,6 +67,8 @@ export function ReviewStep({
   return (
     <div className="space-y-10">
       <ScoreboardBanner checks={checks} flagged={flagged} />
+
+      {playerNotes && <PlayerNotesCheck notes={playerNotes} />}
 
       {log.warnings.length > 0 && (
         <details>
@@ -137,6 +141,66 @@ export function ReviewStep({
       </details>
     </div>
   );
+}
+
+/**
+ * The player notes after the run: the starters the user confirmed, plus what
+ * the AI added while watching. The user checks them here because jersey
+ * numbers drive the per-player columns.
+ */
+function PlayerNotesCheck({ notes }: { notes: { start: string; updates: string[] } }) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <section className={`rounded-[0.75rem] border px-4 py-3 ${checked ? "border-border bg-surface" : "border-warning-border bg-warning-bg text-warning-text"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">{checked ? "Player notes checked" : "Check the player notes"}</h2>
+        <button type="button" className="btn btn-secondary min-h-9 text-sm" onClick={() => setChecked(!checked)}>
+          {checked ? "Undo" : "They look right"}
+        </button>
+      </div>
+      {!checked && (
+        <>
+          <p className="mt-1 text-sm">
+            The AI updated these while it watched. Make sure the new players and numbers are right. If a jersey number is wrong, fix that player&apos;s rows in the possession log below.
+          </p>
+          <div className="mt-3 grid gap-4 text-sm text-text sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">Starters (you checked)</p>
+              <ul className="mt-1 space-y-0.5">
+                {notes.start.split("\n").filter(Boolean).map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">Added during the game</p>
+              {notes.updates.length === 0 ? (
+                <p className="mt-1 text-muted">No changes noticed.</p>
+              ) : (
+                <ul className="mt-1 space-y-0.5">
+                  {notes.updates.map((line, i) => (
+                    <li key={i} className="font-medium">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Fixing a possession the AI gave to the wrong team: every event in it
+ * flips sides too, so the shots score for the right team.
+ */
+function switchTeam(p: Possession, team: Team): Possession {
+  if (team === p.team) return p;
+  const flip = (t: Team): Team => (t === "roslyn" ? "opponent" : "roslyn");
+  return { ...p, team, events: p.events.map((e) => ({ ...e, team: flip(e.team) })) };
 }
 
 function DefenseTable({ log }: { log: PossessionLog }) {
@@ -390,7 +454,7 @@ function PossessionRow({
         <td className={td}>{index + 1}</td>
         <td className={td}>{formatTime(p.videoStart)}</td>
         <td className="px-3 py-1.5" onClick={stop}>
-          <select className="rounded-md bg-transparent py-1" value={p.team} onChange={(e) => onChange({ ...p, team: e.target.value as Team })} aria-label="Team">
+          <select className="rounded-md bg-transparent py-1" value={p.team} onChange={(e) => onChange(switchTeam(p, e.target.value as Team))} aria-label="Team">
             <option value="roslyn">Roslyn</option>
             <option value="opponent">{away}</option>
           </select>

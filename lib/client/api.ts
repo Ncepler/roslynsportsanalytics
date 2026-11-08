@@ -66,9 +66,13 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
   };
 }
 
-/** Polls until Gemini has processed the video. */
+const PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** Polls until Gemini has processed the video (gives up after 15 minutes). */
 export async function waitForActive(name: string, signal: AbortSignal): Promise<GeminiFile> {
+  const giveUpAt = Date.now() + PROCESSING_TIMEOUT_MS;
   for (;;) {
+    if (Date.now() > giveUpAt) throw new ApiError("Gemini is taking too long to process this video. Try again, or try a shorter clip.", 0);
     if (signal.aborted) throw new ApiError("Cancelled.", 0);
     const f = await api<GeminiFile>(`/api/gemini/file?name=${encodeURIComponent(name)}`);
     if (f.state === "ACTIVE") return f;
