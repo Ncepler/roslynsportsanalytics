@@ -24,6 +24,11 @@ export type StatDef = {
   /** Which sheet layouts this stat feeds (ids from lib/sheets). */
   sheets?: string[];
   defaultOn: boolean;
+  /**
+   * Which analysis pass logs this stat (CLAUDE.md section 6.3). Pass 1 builds
+   * the possession list; passes 2 and 3 add events to it. Logged stats only.
+   */
+  pass?: 1 | 2 | 3;
 };
 
 export type SportConfig = {

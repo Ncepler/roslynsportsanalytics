@@ -39,6 +39,7 @@ function stageIndex(run: RunState, upload: UploadState | null): number {
 export function RunStep({
   keptSeconds,
   segments,
+  passes = 1,
   estimate,
   resolution,
   onResolution,
@@ -52,6 +53,8 @@ export function RunStep({
 }: {
   keptSeconds: number;
   segments: number;
+  /** Analysis passes per part (section 6.3); more stats checked can mean more passes. */
+  passes?: number;
   estimate: Estimate;
   resolution: Resolution;
   onResolution: (r: Resolution) => void;
@@ -164,7 +167,8 @@ export function RunStep({
           </dl>
           <p className="hint mt-2">
             {estimate?.measured ? "Based on Gemini's real token count for this video." : "Rough guess until the upload finishes and Gemini counts the video."}{" "}
-            Prices are unverified. Runs in {segments} {segments === 1 ? "part" : "parts"}.
+            Prices are unverified. Runs in {segments} {segments === 1 ? "part" : "parts"}
+            {passes > 1 ? `, ${passes} passes each (the AI watches each part ${passes} times, once per group of stats)` : ""}.
           </p>
 
           {needsConfirm && (
@@ -196,7 +200,7 @@ export function RunStep({
           <ol className="space-y-2.5">
             {STAGES.map((label, i) => {
               const state = i < current ? "done" : i === current ? "active" : "todo";
-              const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} parts done` : "";
+              const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} steps done` : "";
               return (
                 <li key={label} className={`flex items-center gap-3 ${state === "todo" ? "text-muted" : ""}`}>
                   <span

@@ -8,7 +8,8 @@ import { keptRanges, planSegments, totalSeconds } from "@/lib/client/segments";
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
 import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/gemini/pricing";
-import { defaultStatIds, SPORTS } from "@/lib/sports";
+import { passesNeeded } from "@/lib/gemini/prompt";
+import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
 import { ReviewStep } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
@@ -166,6 +167,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const watchedSeconds = segments.reduce((s, seg) => s + (seg.watch.end - seg.watch.start), 0);
   const readyFile = upload?.status === "ready" ? upload.file : null;
 
+  const passCount = passesNeeded(getSport(setup.sportId)!, setup.statIds).length;
   // Calibrated speed from past runs (localStorage), read once on the client.
   const [speed] = useState(() => (typeof window === "undefined" ? 0.35 : secondsPerVideoSecond()));
   const estimateKey = `${readyFile?.uri ?? ""}|${resolution}|${segments.map((s) => `${s.watch.start}-${s.watch.end}`).join(",")}`;
@@ -174,11 +176,12 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const estimate: Estimate = useMemo(() => {
     if (watchedSeconds <= 0) return null;
     const longest = Math.max(...segments.map((s) => s.watch.end - s.watch.start));
-    const seconds = longest * speed + 30;
+    // Each pass re-watches the video (cost × passes); passes 2 and 3 run together after pass 1 (time × 2).
+    const seconds = longest * speed * (passCount > 1 ? 2 : 1) + 30;
     const real = measured?.key === estimateKey ? measured.tokens : null;
-    const tokens = real ?? watchedSeconds * ROUGH_TOKENS_PER_SECOND[resolution];
-    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds), seconds, measured: real !== null };
-  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution]);
+    const tokens = (real ?? watchedSeconds * ROUGH_TOKENS_PER_SECOND[resolution]) * passCount;
+    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds * passCount), seconds, measured: real !== null };
+  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution, passCount]);
 
   // Real count via count_tokens, debounced while the user drags.
   useEffect(() => {
@@ -231,7 +234,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     try {
       const gfile = readyFile!;
       const runSetup: GameSetup = { ...setup, appearanceNotes: confirmedNotes };
-      setRun({ phase: "logging", done: 0, total: segments.length, started });
+      setRun({ phase: "logging", done: 0, total: segments.length * passCount, started });
       const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
       );
@@ -343,6 +346,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
           <RunStep
             keptSeconds={keptSeconds}
             segments={segments.length}
+            passes={passCount}
             estimate={estimate}
             resolution={resolution}
             onResolution={setResolution}

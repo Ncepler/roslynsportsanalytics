@@ -17,20 +17,26 @@ const nullable = (type: string | string[], extra: Record<string, unknown> = {}) 
   ...extra,
 });
 
-/** Which event types and fields the checked stats need. */
-export function requestedShape(sport: SportConfig, statIds: string[]) {
-  const checked = sport.stats.filter((s) => statIds.includes(s.id) && s.source === "logged");
+const passOf = (s: { pass?: 1 | 2 | 3 }) => s.pass ?? 1;
+
+/** The passes a run needs for the checked stats, always including pass 1 (section 6.3). */
+export function passesNeeded(sport: SportConfig, statIds: string[]): (1 | 2 | 3)[] {
+  const passes = new Set<1 | 2 | 3>([1]);
+  for (const s of sport.stats) if (s.source === "logged" && statIds.includes(s.id)) passes.add(passOf(s));
+  return [...passes].sort();
+}
+
+/** Which event types and fields the checked stats of one pass need. */
+export function requestedShape(sport: SportConfig, statIds: string[], pass: 1 | 2 | 3 = 1) {
+  const checked = sport.stats.filter((s) => statIds.includes(s.id) && s.source === "logged" && passOf(s) === pass);
   const events = new Set<EventType>(checked.flatMap((s) => s.events ?? []));
   const fields = new Set<EventField>(checked.flatMap((s) => s.fields ?? []));
-  // The scoreboard check needs points for both teams, so shots are always logged.
-  events.add("shot");
+  // The scoreboard check needs points for both teams, so pass 1 always logs shots.
+  if (pass === 1) events.add("shot");
   return { checked, events: [...events], fields: [...fields] };
 }
 
-/** JSON schema for the possession log, built from the checked stats. */
-export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
-  const { events, fields } = requestedShape(sport, statIds);
-
+function eventProperties(sport: SportConfig, events: EventType[], fields: EventField[]) {
   const eventProps: Record<string, unknown> = {
     type: { type: "string", enum: events },
     team: { type: "string", enum: ["roslyn", "opponent"] },
@@ -46,6 +52,15 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
   if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: ["paint", "mid-range", "corner 3", "above-the-break 3", null] });
   if (fields.includes("turnoverType")) eventProps.turnoverType = nullable("string", { enum: ["steal", "bad pass", "travel", "offensive foul", "out of bounds", "violation", "other", null] });
   if (fields.includes("contested")) eventProps.contested = nullable("boolean");
+  return eventProps;
+}
+
+const EVENT_REQUIRED = ["type", "team", "videoTime", "clock", "player", "description"];
+
+/** JSON schema for the possession log (pass 1), built from the checked stats. */
+export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
+  const { events, fields } = requestedShape(sport, statIds, 1);
+  const eventProps = eventProperties(sport, events, fields);
 
   return {
     type: "object",
@@ -64,7 +79,7 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
             context: nullable("string", { enum: ["M", "Z", "F", null] }),
             events: {
               type: "array",
-              items: { type: "object", properties: eventProps, required: ["type", "team", "videoTime", "clock", "player", "description"] },
+              items: { type: "object", properties: eventProps, required: EVENT_REQUIRED },
             },
             confidence: { type: "string", enum: ["high", "medium", "low"] },
             note: nullable("string"),
@@ -100,7 +115,7 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
 }
 
 export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }) {
-  const { checked } = requestedShape(sport, setup.statIds);
+  const { checked } = requestedShape(sport, setup.statIds, 1);
   const roster = (label: string, list: string) => (list.trim() ? `${label} jersey numbers: ${list.trim()}.` : "");
 
   return [
@@ -154,4 +169,53 @@ export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: 
     "For each player: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",
     "Do not describe faces. Do not guess names. If a jersey number is unreadable, say so.",
   ].join("\n");
+}
+
+// ---------- passes 2 and 3: add events to pass 1's possessions ----------
+
+export type PossessionRef = { team: "roslyn" | "opponent"; videoStart: number; videoEnd: number; quarter: string | null; clockStart: string | null };
+
+export function eventsPassSchema(sport: SportConfig, statIds: string[], pass: 2 | 3) {
+  const { events, fields } = requestedShape(sport, statIds, pass);
+  return {
+    type: "object",
+    properties: {
+      events: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            possession: { type: "integer", description: "The # of the possession (from the list) this event belongs to." },
+            ...eventProperties(sport, events, fields),
+          },
+          required: ["possession", ...EVENT_REQUIRED],
+        },
+      },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: ["events", "warnings"],
+  };
+}
+
+export function eventsPassPrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }, pass: 2 | 3, possessions: PossessionRef[]) {
+  const { checked } = requestedShape(sport, setup.statIds, pass);
+  return [
+    `You are adding detail to a ${sport.label.toLowerCase()} possession log that was already made from this video. Log what you SEE. Never guess.`,
+    `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
+    setup.appearanceNotes?.trim() ? `Player notes (checked by a person):\n${setup.appearanceNotes.trim()}` : "",
+    `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s. Report every videoTime in seconds from the start of the FULL video file.`,
+    "",
+    "Possessions already logged (# · team · video seconds · quarter · clock):",
+    ...possessions.map((p, i) => `#${i} · ${p.team} · ${p.videoStart.toFixed(1)}-${p.videoEnd.toFixed(1)}s · Q${p.quarter ?? "?"} · ${p.clockStart ?? "?"}`),
+    "",
+    "Log ONLY these, each tagged with the # of the possession it happened in:",
+    ...checked.map((s) => `- ${s.label}: ${s.description}`),
+    "",
+    "Rules:",
+    "- Do not add up or total anything. One entry per event.",
+    "- If you cannot tell which possession an event belongs to, or cannot see it clearly, leave it out and say so in warnings. Omission beats a guess.",
+    "- Do not log shots again; they are already in the log.",
+  ]
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
+    .join("\n");
 }
