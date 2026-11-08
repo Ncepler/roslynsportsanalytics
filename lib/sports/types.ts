@@ -30,6 +30,16 @@ export type SportConfig = {
   id: string;
   label: string;
   periods: string[];
+  /** Players on the field or court per team (how many appearance notes to ask for). */
+  playersPerSide: number;
+  /** "court" or "field", used in prompts. */
+  surface: "court" | "field";
+  /** Allowed point values for a scoring shot (1 = free throw in basketball; a lacrosse goal is 1). */
+  shotPoints: number[];
+  /** How the AI should fill a shot's points. */
+  shotPointsHelp: string;
+  /** Sheet layouts this sport exports (ids from lib/sheets). */
+  sheets: string[];
   /** What the AI is told a possession is. */
   possessionDefinition: string;
   stats: StatDef[];

@@ -6,6 +6,11 @@ export const basketball: SportConfig = {
   id: "basketball",
   label: "Basketball",
   periods: ["1", "2", "3", "4", "OT"],
+  playersPerSide: 5,
+  surface: "court",
+  shotPoints: [1, 2, 3],
+  shotPointsHelp: "1 = free throw, 2 = two-pointer, 3 = three-pointer.",
+  sheets: ["offense-summary", "possession-log", "roslyn-offense"],
   possessionDefinition:
     "A possession starts when a team gains control of the ball and ends on a made basket (or the last made free throw of a trip), a turnover, a defensive rebound by the other team, or the end of a period. An offensive rebound does NOT start a new possession: the missed shot and the offensive rebound stay in the same possession.",
   stats: [

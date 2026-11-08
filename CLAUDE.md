@@ -2,7 +2,9 @@
 
 Read this whole file before doing anything. It holds every decision made so far for this project. If Noah asks something that is answered here, answer from here. When Noah makes a new decision (new stat, new sport, new rule), update the matching section of this file in the same session.
 
-**Status:** phase 1 is live. Phases 2–5 (basketball end-to-end: upload, trim, setup, Gemini analysis, derivations, review, export, segmenting, appearance notes) are built on branch `claude/youthful-hopper-oz3qs6` but not yet tested on a real clip (waiting on the Gemini key and a test clip). Lacrosse and the Season tab are not started. Start each new phase in plan mode.
+**Status:** live on Vercel. Basketball and lacrosse Analyze flows are built (upload, trim, setup, Gemini analysis, derivations, review, export, segmenting, appearance notes) but **not yet tested on a real clip** (waiting on the Gemini key and a test clip). The real Season tab is not built; a simulated Season trends demo exists on `/test` (section 20). Start each new phase in plan mode.
+
+**Reminder for Noah (do this when setting up the real password):** the club password will be the club's Google Classroom password. Set it as `CLUB_PASSWORD` in Vercel, set `ALLOW_TEST_LOGIN=false`, remove the Test button, and redeploy. Never write the password itself into this file or the code.
 
 ---
 
@@ -57,8 +59,10 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
    - Optional roster: jersey numbers for each team
    - Stats checklist (changes by sport; grouped by tier, section 8; "Experimental" group collapsed and unchecked by default)
    Roslyn is always the home/our team, so never ask for the school name.
+   **Built (Noah's Nov 8 feedback):** the step is titled "Who's playing?" with no explanatory subtitle. Sport is two buttons. Roslyn's jersey color is a **Blue** button, a **White** button, or **Other** (type it), because it is almost always blue or white. Opponent name and their color are text boxes. Rosters sit under "Add jersey numbers (optional)".
+   **Trim extras (built):** a "Skip halftime and timeouts" section with two buttons: "Break starts here", then "Game resumes here" (from the video playhead), plus typed times as a fallback. The tip-off mark was dropped: the start handle already marks where the game begins.
 4. **Analyze button.** Shows an estimate before starting (time and approximate cost), then stages while running (section 6). Shows "about X min remaining" labeled clearly as an estimate.
-5. **Review.** Editable tables styled like the club's sheets. Clicking a row jumps the video to that moment. Each row shows a "needs review" flag where confidence is low. The user fixes mistakes here.
+5. **Review.** Editable tables styled like the club's sheets. The possession log shows the first 5 possessions, then a "Show all N possessions" button. Clicking a row jumps the video to that moment. Each row shows a "needs review" flag where confidence is low. The user fixes mistakes here.
 6. **Export.** "Copy for Google Sheets" button (tab-separated, pastes straight into cells) and CSV/XLSX download, one per sheet layout (section 10). Direct writing into Google Sheets via a service account is a later phase, not v1.
 
 ## 6. Video pipeline
@@ -67,7 +71,7 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
 
 **Analysis.**
 1. Optional scoreboard check: sample a frame and confirm the quarter, clock, and score digits are readable at the chosen resolution. Warn if not.
-2. **Appearance-notes pass:** one quick request on the start of the game produces notes like "#5 white, headband, tallest." Show them to the user to correct. Pass the corrected notes as plain text into every later request (Gemini remembers nothing between requests). Discard after the run.
+2. **Appearance-notes pass:** one quick request on the start of the game produces notes like "#5 white, headband, tallest." It asks for **5 players per team in basketball and 10 per team in lacrosse** (`playersPerSide` in the sport config). Show them to the user to correct. Pass the corrected notes as plain text into every later request (Gemini remembers nothing between requests). Discard after the run.
 3. **Possession-log pass(es):** ask Gemini for structured JSON (response schema, low temperature). Group stats into 2–3 passes (for example: shots and possessions; then turnovers, fouls, and rebounds; then experimental stats) because one huge checklist in one request lowers accuracy.
 4. Each logged event includes: video timestamp, game clock and quarter (read from the scoreboard), and a one-line description of what was seen. This lets a human verify it and lets the click-to-jump work.
 5. **Long games:** use the video part's `start_offset` / `end_offset` (static processing mode) to run 3–4 requests in parallel by quarter or half on the one uploaded file. Do not cut or re-upload files. Overlap segments by about 30 seconds and dedupe by quarter + game clock (fall back to video timestamp). Segment timestamps are relative to the original file, so keep them that way, and add the segment start back if the API reports times relative to the clip. Pass the appearance notes into every segment.
@@ -77,7 +81,7 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
 
 **Progress and time estimates.** Gemini does not report real progress. Stages shown: Uploading, Processing, Reading the game (appearance notes), Logging possessions ("3 of 4 sections done" is real progress when segmenting), Checking totals, Building tables. The ETA is an estimate from video length and from how long past runs took (calibrate with `localStorage`). Label it "estimate" on screen. The estimate for time and cost also updates live as the user drags the trim markers, using `count_tokens` where possible.
 
-**Cost guard.** Show the estimated cost before the run and require a confirm above a small threshold. Enforce a maximum video duration per run.
+**Cost guard.** Show the estimated cost before the run. Enforce a maximum video duration per run (2 hours). **Noah decided (Nov 8): no cost-confirm checkbox on the real page** (students using it don't manage costs); the checkbox appears only on the `/test` simulation, to show the feature.
 
 ## 7. Data model: the possession log is the source of truth
 
@@ -118,10 +122,10 @@ Adding a stat should automatically: add it to the checklist, to Gemini's JSON sc
 
 **When Noah says "add stat X," do this:** add the entry to the sport config, add a derivation if needed, add it to the right sheet layout, run the type checker, test on a saved sample result, and update section 9 of this file.
 
-**Tiers (shown as groups in the checklist):**
-- **Reliable** (checked by default)
-- **Decent** (checked by default, flagged "review recommended")
-- **Experimental** (unchecked, collapsed, labeled so)
+**Tiers (shown as groups in the checklist).** Internal ids stay `reliable` / `decent` / `experimental`; the labels students see (renamed Nov 8) are group titles for how much to trust each kind of stat:
+- **Reliable**: "The AI gets these right almost every time." (checked by default)
+- **Double-check**: "Usually right. Look them over before copying." (checked by default)
+- **Long shots**: "Often wrong. Off unless you turn them on." (unchecked, collapsed)
 
 ## 9. Stats catalog
 
@@ -137,7 +141,7 @@ The tiers below are my best guesses, **untested**. Test them on real footage and
 
 ### Lacrosse (second priority)
 
-v1 = the two sheets Noah showed (section 10): turnovers by quarter for both teams, and defensive possessions by M/Z/F with Goal / No Goal results and efficiency. Ask Noah what else he wants before adding stats. Lacrosse is harder than basketball for AI (small ball, wide field, many players), so expect more corrections.
+v1 = the two sheets Noah showed (section 10): turnovers by quarter for both teams, and defensive possessions by M/Z/F with Goal / No Goal results and efficiency. **Built** in `lib/sports/lacrosse.ts` (logged: shots and goals, turnovers, defense type; derived: score by quarter, scoreboard check, turnovers by quarter, Roslyn defense by M/Z/F, possessions by quarter). The Efficiency and Total Efficiency columns are left blank until Noah confirms the formula. Ask Noah what else he wants before adding stats. Lacrosse is harder than basketball for AI (small ball, wide field, many players), so expect more corrections.
 
 **Lacrosse turnover idea (a hypothesis, test it):** the ball is hard to see, but a turnover often shows up as play shifting from one end of the field to the other. The camera follows the ball and pans left and right, so "left side of the frame" is not a reliable cue. Use which goal the play is at, the teams' jersey colors, and the scoreboard instead.
 
@@ -250,7 +254,7 @@ Acceptance check for each phase: run it on a real clip or sample, and show Noah 
 
 ## 18. Open questions to ask Noah (do not guess)
 
-1. Lacrosse efficiency and Total Efficiency formulas.
+1. Lacrosse efficiency and Total Efficiency formulas. (Noah: leave blank for now; ask the club.)
 2. ~~Whether an offensive rebound continues a possession~~ (answered: same row). Still open: whose rebounds the Off / Def columns count. Current code counts every rebound inside that row's possessions (Off = the offense's boards, Def = the defense's board that ended it).
 3. What the number in tab names (like "…121") means.
 4. Which total is right for the plus/minus mismatch (section 10).
@@ -286,3 +290,11 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 - **Copy button:** the label changes to "Copied" with a short crossfade (blur 2px can mask a rough one). This is the feedback purpose.
 - Delight only at rare moments (for example, a first completed analysis). Keep it small.
 - Review motion at 2–5× slower speed, frame by frame in the DevTools animation panel, test the trim gestures on a real phone, and look again the next day.
+
+## 20. The /test simulation page
+
+`/test` (behind the login like every page) runs the real Analyze screens against a simulator (`lib/demo/`), plus a simulated **Season trends** tab with charts. Nothing is uploaded, no AI is called, nothing costs money.
+
+- **Made-up data is allowed ONLY on `/test`**, and it is labeled as simulated on the page and above every result. **Never** use simulated or invented data on the real Analyze page or the real Season tab (section 3, rule 1).
+- Each simulated game plants one scoring mistake (the third quarter when it has a score) so the scoreboard check visibly catches it.
+- The simulated season (18 made-up games) uses the real statistics code in `lib/season/stats.ts` (Pearson r, minimum games, minimum |r|), which the real Season tab should reuse. Charts are hand-written SVG in `components/season/charts.tsx` (no chart library).

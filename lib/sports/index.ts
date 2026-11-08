@@ -1,9 +1,11 @@
 import { basketball } from "./basketball";
+import { lacrosse } from "./lacrosse";
 import type { SportConfig } from "./types";
 
 // Register a new sport by importing its config and adding it here.
 export const SPORTS: Record<string, SportConfig> = {
   basketball,
+  lacrosse,
 };
 
 export function getSport(id: string): SportConfig | undefined {

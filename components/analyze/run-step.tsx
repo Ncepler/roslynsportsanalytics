@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import type { Resolution, RunUsage } from "@/lib/client/run";
-import { CONFIRM_ABOVE_USD } from "@/lib/gemini/limits";
 import type { Estimate, UploadState } from "./analyze-flow";
 
 export type RunState =
@@ -68,7 +67,8 @@ export function RunStep({
   const [notes, setNotes] = useState(run.phase === "notes" ? run.notes : "");
   const [now, setNow] = useState(() => performance.now());
   const running = !["idle", "error", "done"].includes(run.phase);
-  const needsConfirm = (estimate?.cost ?? 0) > CONFIRM_ABOVE_USD;
+  // The cost confirm only shows on /test (to demonstrate it); club members on the real page don't manage spend.
+  const needsConfirm = demo && (estimate?.cost ?? 0) > 0;
 
   // When the notes arrive, load them into the editable box.
   const incomingNotes = run.phase === "notes" ? run.notes : null;

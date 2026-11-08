@@ -3,7 +3,10 @@
 // Numbers stay numbers; a stat that wasn't tracked stays blank, never 0.
 
 import {
+  defenseByContext,
   formatMSS,
+  quartersIn,
+  turnoversByQuarter,
   possessionSeconds,
   statLine,
   summaryByContext,
@@ -103,8 +106,43 @@ export function roslynOffenseTemplate(log: PossessionLog, tracked: Tracked): She
   return { id: "roslyn-offense", title: "Roslyn offense template", header: [[null, "2PT", "3PT", "FT", "Rebounds", "Assists"]], rows };
 }
 
-export function allSheets(log: PossessionLog, statIds: string[], awayName: string): Sheet[] {
+/** Lacrosse turnovers: rows Roslyn and the opponent, columns per quarter and a total. */
+export function laxTurnovers(log: PossessionLog, tracked: Tracked, awayName: string): Sheet {
+  const quarters = quartersIn(log).filter((q) => q !== "?");
+  const cols = quarters.length > 0 ? quarters : ["1", "2", "3", "4"];
+  const by = turnoversByQuarter(log);
+  const row = (team: Team, label: string): Cell[] => {
+    const values = cols.map((q) => by[q]?.[team] ?? 0);
+    return [label, ...values.map((v) => (tracked("turnovers") ? v : null)), tracked("turnovers") ? values.reduce((a, b) => a + b, 0) : null];
+  };
+  return {
+    id: "lax-turnovers",
+    title: "Lacrosse turnovers",
+    header: [[null, ...cols.map((q) => (q === "OT" ? "OT" : `Q${q}`)), "Total turnovers"]],
+    rows: [row("roslyn", "Roslyn"), row("opponent", awayName)],
+  };
+}
+
+/** Lacrosse defense: Roslyn's defensive possessions by M / Z / F, Goal or No Goal. Efficiency stays blank (formula unknown). */
+export function laxDefense(log: PossessionLog, tracked: Tracked): Sheet {
+  const d = defenseByContext(log, "roslyn");
+  const on = tracked("shots") && tracked("context");
+  const rows: Cell[][] = d.rows.map((r) => [on ? r.possessions : null, r.context, on ? r.noGoals : null, on ? r.goals : null, null, null]);
+  if (on && d.unknown.possessions > 0) rows.push([d.unknown.possessions, "Unclassified", d.unknown.noGoals, d.unknown.goals, null, null]);
+  return {
+    id: "lax-defense",
+    title: "Lacrosse defense (Roslyn)",
+    header: [
+      ["Defensive Possession #", null, "Possession Result", null, "Efficiency", "Total Efficiency"],
+      [null, null, "No Goal", "Goal", null, null],
+    ],
+    rows,
+  };
+}
+
+export function allSheets(log: PossessionLog, statIds: string[], awayName: string, sportId = "basketball"): Sheet[] {
   const tracked: Tracked = (id) => statIds.includes(id);
+  if (sportId === "lacrosse") return [laxTurnovers(log, tracked, awayName || "Opponent"), laxDefense(log, tracked)];
   return [
     offenseSummary(log, "roslyn", tracked, "Roslyn"),
     possessionLogSheet(log, "roslyn", tracked, "Roslyn"),

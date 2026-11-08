@@ -269,3 +269,26 @@ export function scoreboardCheck(log: PossessionLog): ScoreCheck[] {
 
 /** Quarters with at least one scoreboard mismatch: these need review. */
 export const flaggedQuarters = (checks: ScoreCheck[]) => [...new Set(checks.filter((c) => !c.ok).map((c) => c.quarter))];
+
+// ---------- lacrosse ----------
+
+export type DefenseRow = { context: Context | null; possessions: number; goals: number; noGoals: number };
+
+/**
+ * A team's defense by the defense type it played (the context logged on the
+ * other team's possessions): possessions, goals allowed, and stops.
+ * Efficiency is not computed: the club's formula is unknown (section 18).
+ */
+export function defenseByContext(log: PossessionLog, defending: Team): { rows: DefenseRow[]; unknown: DefenseRow; total: DefenseRow } {
+  const attacking = log.possessions.filter((p) => p.team !== defending);
+  const row = (context: Context | null): DefenseRow => {
+    const ps = attacking.filter((p) => p.context === context);
+    const goals = ps.filter((p) => possessionPoints(p) > 0).length;
+    return { context, possessions: ps.length, goals, noGoals: ps.length - goals };
+  };
+  const rows = CONTEXTS.map(row);
+  const unknown = row(null);
+  const all = [...rows, unknown];
+  const sum = (k: "possessions" | "goals" | "noGoals") => all.reduce((s, r) => s + r[k], 0);
+  return { rows, unknown, total: { context: null, possessions: sum("possessions"), goals: sum("goals"), noGoals: sum("noGoals") } };
+}
