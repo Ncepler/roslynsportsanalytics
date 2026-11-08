@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { RunUsage } from "@/lib/client/run";
 import { formatTime } from "@/lib/client/time";
 import {
+  defenseByContext,
   fastBreakPoints,
   flaggedQuarters,
   foulsByQuarter,
@@ -23,6 +24,9 @@ import type { Context, LogEvent, Possession, PossessionLog, Team } from "@/lib/g
 import type { GameSetup } from "@/lib/gemini/prompt";
 import { allSheets, toCSV, toTSV, type Sheet } from "@/lib/sheets";
 import { CopyButton } from "./copy-button";
+
+/** Possession rows shown before "Show all". */
+const INITIAL_ROWS = 5;
 
 const pct = (v: number | null) => (v === null ? "–" : `${(v * 100).toFixed(1)}%`);
 const num = (v: number | null, d = 2) => (v === null ? "–" : v.toFixed(d));
@@ -46,7 +50,8 @@ export function ReviewStep({
   const away = setup.awayName || "Opponent";
   const checks = useMemo(() => scoreboardCheck(log), [log]);
   const flagged = flaggedQuarters(checks);
-  const sheets = useMemo(() => allSheets(log, setup.statIds, away), [log, setup.statIds, away]);
+  const lax = setup.sportId === "lacrosse";
+  const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId), [log, setup.statIds, away, setup.sportId]);
   const roslyn = summaryByContext(log, "roslyn").total;
   const opp = summaryByContext(log, "opponent").total;
 
@@ -80,6 +85,7 @@ export function ReviewStep({
           {on("pace") && <QuarterTable title="Possessions by quarter" data={paceByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("by-quarter") && on("turnovers") && <QuarterTable title="Turnovers by quarter" data={turnoversByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("by-quarter") && on("fouls") && <QuarterTable title="Fouls by quarter" data={foulsByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
+          {lax && on("defense") && on("context") && <DefenseTable log={log} />}
           <TeamTable
             away={away}
             rows={[
@@ -103,7 +109,7 @@ export function ReviewStep({
         <p className="hint mt-1">
           Click a row to jump the video there. Rows marked <span className="font-medium text-warning-text">Check</span> are low-confidence or in a quarter that failed the scoreboard check.
         </p>
-        <PossessionEditor log={log} flagged={flagged} away={away} onSeek={onSeek} onChange={updatePossession} />
+        <PossessionEditor log={log} flagged={flagged} away={away} lax={lax} onSeek={onSeek} onChange={updatePossession} />
       </section>
 
       <section>
@@ -129,6 +135,43 @@ export function ReviewStep({
           </pre>
         ))}
       </details>
+    </div>
+  );
+}
+
+function DefenseTable({ log }: { log: PossessionLog }) {
+  const d = defenseByContext(log, "roslyn");
+  const rows = [...d.rows, ...(d.unknown.possessions > 0 ? [d.unknown] : [])];
+  return (
+    <div className="overflow-x-auto">
+      <h3 className="text-sm font-semibold">Roslyn defense</h3>
+      <table className="mt-2 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border">
+            <th className={th}>vs</th>
+            <th className={`${th} text-right`}>Possessions</th>
+            <th className={`${th} text-right`}>No goal</th>
+            <th className={`${th} text-right`}>Goal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.context ?? "?"} className="border-b border-border last:border-0">
+              <td className="px-3 py-2">{r.context === "M" ? "Man (M)" : r.context === "Z" ? "Zone (Z)" : r.context === "F" ? "Fast break (F)" : "Unclassified"}</td>
+              <td className={`${td} text-right`}>{r.possessions}</td>
+              <td className={`${td} text-right`}>{r.noGoals}</td>
+              <td className={`${td} text-right`}>{r.goals}</td>
+            </tr>
+          ))}
+          <tr className="font-semibold">
+            <td className="px-3 py-2">Total</td>
+            <td className={`${td} text-right`}>{d.total.possessions}</td>
+            <td className={`${td} text-right`}>{d.total.noGoals}</td>
+            <td className={`${td} text-right`}>{d.total.goals}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="hint mt-2">Efficiency is left blank until the club confirms its formula.</p>
     </div>
   );
 }
@@ -231,7 +274,8 @@ function TeamTable({ rows, away }: { rows: (false | [string, string | number, st
   );
 }
 
-function eventLabel(e: LogEvent): string {
+function eventLabel(e: LogEvent, lax = false): string {
+  if (e.type === "shot" && lax) return e.made === true ? "Goal" : e.made === false ? "Shot, no goal" : "Shot ?";
   if (e.type === "shot") return `${e.points === 1 ? "FT" : `${e.points ?? "?"}PT`} ${e.made === true ? "made" : e.made === false ? "miss" : "?"}`;
   if (e.type === "rebound") return e.reboundType === "offensive" ? "Off reb" : e.reboundType === "defensive" ? "Def reb" : "Reb";
   if (e.type === "turnover") return e.turnoverType ? `TO (${e.turnoverType})` : "Turnover";
@@ -242,19 +286,25 @@ function PossessionEditor({
   log,
   flagged,
   away,
+  lax,
   onSeek,
   onChange,
 }: {
   log: PossessionLog;
   flagged: string[];
   away: string;
+  lax: boolean;
   onSeek: (t: number) => void;
   onChange: (i: number, p: Possession | null) => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
   if (log.possessions.length === 0) return <p className="mt-4 text-muted">The AI didn&apos;t log any possessions in this stretch.</p>;
+  const shown = showAll ? log.possessions : log.possessions.slice(0, INITIAL_ROWS);
+  const hidden = log.possessions.length - shown.length;
 
   return (
+    <>
     <div className="relative mt-4 overflow-x-auto rounded-[0.75rem] border border-border">
       <table className="w-full min-w-[44rem] border-collapse text-sm">
         <thead className="bg-surface-sunken">
@@ -266,14 +316,14 @@ function PossessionEditor({
             <th className={th}>Clock</th>
             <th className={th}>vs</th>
             <th className={th}>What happened</th>
-            <th className={`${th} text-right`}>Pts</th>
+            <th className={`${th} text-right`}>{lax ? "Goals" : "Pts"}</th>
             <th className={th}>
               <span className="sr-only">Status</span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {log.possessions.map((p, i) => {
+          {shown.map((p, i) => {
             const review = p.confidence === "low" || flagged.includes(p.quarter ?? "?");
             return (
               <PossessionRow
@@ -281,6 +331,7 @@ function PossessionEditor({
                 index={i}
                 p={p}
                 away={away}
+                lax={lax}
                 review={review}
                 open={open === i}
                 onToggle={() => setOpen(open === i ? null : i)}
@@ -292,6 +343,12 @@ function PossessionEditor({
         </tbody>
       </table>
     </div>
+    {(hidden > 0 || showAll) && log.possessions.length > INITIAL_ROWS && (
+      <button type="button" className="btn btn-secondary mt-3 text-sm" onClick={() => setShowAll(!showAll)}>
+        {showAll ? "Show fewer" : `Show all ${log.possessions.length} possessions`}
+      </button>
+    )}
+    </>
   );
 }
 
@@ -299,6 +356,7 @@ function PossessionRow({
   index,
   p,
   away,
+  lax,
   review,
   open,
   onToggle,
@@ -308,6 +366,7 @@ function PossessionRow({
   index: number;
   p: Possession;
   away: string;
+  lax: boolean;
   review: boolean;
   open: boolean;
   onToggle: () => void;
@@ -351,7 +410,7 @@ function PossessionRow({
             <option value="">?</option>
           </select>
         </td>
-        <td className="px-3 py-2">{p.events.map(eventLabel).join(", ") || "–"}</td>
+        <td className="px-3 py-2">{p.events.map((e) => eventLabel(e, lax)).join(", ") || "–"}</td>
         <td className={`${td} text-right font-medium`}>{possessionPoints(p)}</td>
         <td className="px-3 py-1.5 text-right" onClick={stop}>
           <span className="inline-flex items-center gap-2">
@@ -372,17 +431,24 @@ function PossessionRow({
                   <button type="button" className="tabular-nums text-accent underline-offset-2 hover:underline" onClick={() => onSeek(e.videoTime)}>
                     {formatTime(e.videoTime)}
                   </button>
-                  <span className="min-w-24 font-medium">{eventLabel(e)}</span>
+                  <span className="min-w-24 font-medium">{eventLabel(e, lax)}</span>
                   {e.type === "shot" && (
                     <>
+                      {!lax && (
                       <select className="field min-h-8 w-auto py-0 text-sm" value={e.points ?? ""} onChange={(ev) => setEvent(j, { ...e, points: (Number(ev.target.value) || null) as LogEvent["points"] })} aria-label="Shot value">
                         <option value="1">FT</option>
                         <option value="2">2PT</option>
                         <option value="3">3PT</option>
                       </select>
+                      )}
                       <label className="flex items-center gap-1.5">
-                        <input type="checkbox" className="accent-[var(--accent)]" checked={e.made === true} onChange={(ev) => setEvent(j, { ...e, made: ev.target.checked })} />
-                        Made
+                        <input
+                          type="checkbox"
+                          className="accent-[var(--accent)]"
+                          checked={e.made === true}
+                          onChange={(ev) => setEvent(j, { ...e, made: ev.target.checked, points: lax ? 1 : e.points })}
+                        />
+                        {lax ? "Goal" : "Made"}
                       </label>
                     </>
                   )}

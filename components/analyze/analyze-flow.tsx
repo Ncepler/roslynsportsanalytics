@@ -165,7 +165,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
         if (!gfile) throw new ApiError("The upload didn't finish. Check your connection and try again.", 0);
       }
       const video = { file: gfile, resolution };
-      const runSetup: GameSetup = { ...setup, tipoff: trim.tipoff };
+      const runSetup: GameSetup = { ...setup };
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
@@ -182,7 +182,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     const started = run.phase === "notes" ? run.started : now();
     try {
       const gfile = readyFile!;
-      const runSetup: GameSetup = { ...setup, tipoff: trim.tipoff, appearanceNotes: notes };
+      const runSetup: GameSetup = { ...setup, appearanceNotes: notes };
       setRun({ phase: "logging", done: 0, total: segments.length, started });
       const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
@@ -267,6 +267,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             <TrimStep
               duration={duration}
               canPreview={playable || !videoUrl}
+              hasPlayhead={Boolean(videoUrl) && playable}
               trim={trim}
               onTrim={setTrim}
               currentTime={currentTime}

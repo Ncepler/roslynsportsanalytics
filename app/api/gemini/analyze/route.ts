@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const appearance = body?.kind === "appearance";
     const id = await startVideoInteraction({
       ...range,
-      prompt: appearance ? appearancePrompt(setup, range) : possessionLogPrompt(sport, setup, range),
+      prompt: appearance ? appearancePrompt(sport, setup, range) : possessionLogPrompt(sport, setup, range),
       schema: appearance ? appearanceSchema : possessionLogSchema(sport, setup.statIds),
     });
     return NextResponse.json({ id });

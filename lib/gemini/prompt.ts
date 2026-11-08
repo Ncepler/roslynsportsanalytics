@@ -10,8 +10,6 @@ export type GameSetup = {
   statIds: string[];
   /** Corrected appearance notes, plain text. Lives only for this run. */
   appearanceNotes?: string;
-  /** Video time of the opening tip, if the user marked it. Helps scoreboard sync. */
-  tipoff?: number;
 };
 
 const nullable = (type: string | string[], extra: Record<string, unknown> = {}) => ({
@@ -39,11 +37,11 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
     videoTime: { type: "number", description: "Seconds from the start of the full video file." },
     clock: nullable("string", { description: 'Game clock on the scoreboard as "M:SS", or null if unreadable.' }),
     player: nullable("string", { description: "Jersey number, or null if unreadable." }),
-    points: nullable("integer", { enum: [1, 2, 3, null], description: "Shots only: 1 = free throw, 2, or 3." }),
-    made: nullable("boolean", { description: "Shots only." }),
-    reboundType: nullable("string", { enum: ["offensive", "defensive", null] }),
+    points: nullable("integer", { enum: [...sport.shotPoints, null], description: `Shots only. ${sport.shotPointsHelp}` }),
+    made: nullable("boolean", { description: sport.id === "lacrosse" ? "Shots only: true if it was a goal." : "Shots only." }),
     description: { type: "string", description: "One short line describing what you saw." },
   };
+  if (events.includes("rebound")) eventProps.reboundType = nullable("string", { enum: ["offensive", "defensive", null] });
   if (fields.includes("shotType")) eventProps.shotType = nullable("string", { enum: ["drive", "catch-and-shoot", "pull-up", "post", "putback", "other", null] });
   if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: ["paint", "mid-range", "corner 3", "above-the-break 3", null] });
   if (fields.includes("turnoverType")) eventProps.turnoverType = nullable("string", { enum: ["steal", "bad pass", "travel", "offensive foul", "out of bounds", "violation", "other", null] });
@@ -107,7 +105,6 @@ export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segmen
     `- "opponent": ${setup.awayName}, wearing ${setup.awayColor}. ${roster(setup.awayName, setup.awayRoster)}`,
     setup.appearanceNotes?.trim() ? `\nPlayer appearance notes (from earlier in this game):\n${setup.appearanceNotes.trim()}` : "",
     "",
-    setup.tipoff !== undefined ? `The opening tip-off is at ${setup.tipoff.toFixed(1)}s of the video.` : "",
     `Watch only from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s of the video. Report every videoTime in seconds from the start of the FULL video file, not from the start of this section.`,
     "",
     `Possession rule: ${sport.possessionDefinition}`,
@@ -133,16 +130,18 @@ export const appearanceSchema = {
   properties: {
     notes: {
       type: "array",
-      description: 'One line per player you can tell apart, e.g. "Roslyn #5: white jersey, headband, tallest on court".',
+      description: 'One line per player, e.g. "Roslyn #5: white jersey, headband, tallest on court".',
       items: { type: "string" },
     },
   },
   required: ["notes"],
 };
 
-export function appearancePrompt(setup: GameSetup, segment: { start: number; end: number }) {
+export function appearancePrompt(sport: SportConfig, setup: GameSetup, segment: { start: number; end: number }) {
+  const n = sport.playersPerSide;
   return [
-    "Watch this stretch of a high school basketball game and write short notes that would help someone tell the players apart later in the same video.",
+    `Watch this stretch of a high school ${sport.label.toLowerCase()} game and write short notes that would help someone tell the players apart later in the same video.`,
+    `Describe up to ${n} players for each team (the ${n} on the ${sport.id === "basketball" ? "court" : "field"} for each side): ${n} lines for Roslyn, then ${n} for the opponent.`,
     `Roslyn wears ${setup.roslynColor}. ${setup.awayName} wears ${setup.awayColor}.`,
     `Watch from ${segment.start.toFixed(1)}s to ${segment.end.toFixed(1)}s.`,
     "For each player you can see clearly: team, jersey number if readable, and visible distinguishing features (headband, sleeve, shoe color, height relative to others, position).",

@@ -6,9 +6,6 @@ export const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 /** Longest stretch of video analyzed in one run (cost guard, section 6). */
 export const MAX_RUN_SECONDS = 2 * 60 * 60;
 
-/** Estimated cost above which the user must confirm before analyzing. */
-export const CONFIRM_ABOVE_USD = 0.5;
-
 const VIDEO_TYPES = new Set([
   "video/mp4",
   "video/quicktime",

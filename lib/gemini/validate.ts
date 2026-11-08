@@ -50,7 +50,6 @@ export function parseSetup(raw: unknown): GameSetup | string {
     awayRoster: text(s.awayRoster),
     statIds: statIds.filter((id) => known.has(id)),
     appearanceNotes: text(s.appearanceNotes, 4000),
-    tipoff: isNum(s.tipoff) && s.tipoff >= 0 ? s.tipoff : undefined,
   };
   if (!setup.roslynColor || !setup.awayName || !setup.awayColor) return "Fill in both jersey colors and the away team name.";
   return setup;
