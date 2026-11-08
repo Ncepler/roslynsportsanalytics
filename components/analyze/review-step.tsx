@@ -121,7 +121,7 @@ export function ReviewStep({
         <p className="hint mt-1">Copy pastes straight into the matching cells of the club&apos;s Google Sheet. Blank means the stat wasn&apos;t tracked.</p>
         <div className="mt-4 space-y-8">
           {sheets.map((s) => (
-            <SheetPreview key={s.id} sheet={s} />
+            <SheetPreview key={s.id} sheet={s} fileStem={`${away} - ${s.id}`} />
           ))}
         </div>
       </section>
@@ -536,13 +536,14 @@ function PossessionRow({
   );
 }
 
-function SheetPreview({ sheet }: { sheet: Sheet }) {
+/** Downloads are named "<Opponent> - <sheet-id>.csv" so the Season tab can read them back as one game. */
+function SheetPreview({ sheet, fileStem }: { sheet: Sheet; fileStem: string }) {
   function download() {
     const blob = new Blob([toCSV(sheet)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${sheet.id}.csv`;
+    a.download = `${fileStem.replace(/[\\/:*?"<>|]/g, "")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
