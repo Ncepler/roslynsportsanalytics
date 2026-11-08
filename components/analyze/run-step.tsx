@@ -245,7 +245,12 @@ export function RunStep({
               const state = i < current ? "done" : i === current ? "active" : "todo";
               const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} steps done` : "";
               return (
-                <li key={label} className={`flex items-center gap-3 ${state === "todo" ? "text-muted" : ""}`}>
+                // Stage change: opacity crossfade with --ease-out (section 19); durations drop to 0 under reduced motion.
+                <li
+                  key={label}
+                  className="flex items-center gap-3 transition-opacity duration-[var(--duration-slow)] ease-out"
+                  style={{ opacity: state === "todo" ? 0.45 : 1 }}
+                >
                   <span
                     aria-hidden
                     className={`size-2.5 rounded-full ${state === "done" ? "bg-accent" : state === "active" ? "bg-accent ring-4 ring-[oklch(from_var(--accent)_l_c_h/0.2)]" : "bg-border-strong"}`}

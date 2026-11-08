@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RunUsage } from "@/lib/client/run";
 import { formatTime } from "@/lib/client/time";
 import {
@@ -41,7 +41,9 @@ export function ReviewStep({
   raw,
   playerNotes,
   starters = [],
+  demo = false,
 }: {
+  demo?: boolean;
   playerNotes: { start: string; updates: string[] } | null;
   /** Roslyn starters' numbers, for plus/minus and minutes. */
   starters?: string[];
@@ -70,6 +72,7 @@ export function ReviewStep({
 
   return (
     <div className="space-y-10">
+      <FirstAnalysisMoment demo={demo} />
       <ScoreboardBanner checks={checks} flagged={flagged} />
 
       {playerNotes && <PlayerNotesCheck notes={playerNotes} />}
@@ -264,6 +267,40 @@ function PlusMinusTable({ log, starters, showPm, showMinutes }: { log: Possessio
         {showMinutes && pm.rows.some((r) => r.minutes === null) && " Minutes are blank because the game clock couldn't be read often enough."}
       </p>
     </div>
+  );
+}
+
+/**
+ * Delight, kept small and rare (section 19): the first completed analysis on
+ * this device gets a quiet check mark. Shown once; never again after that.
+ */
+function FirstAnalysisMoment({ demo }: { demo: boolean }) {
+  const key = demo ? "first-analysis-seen-demo" : "first-analysis-seen";
+  const [show] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return !localStorage.getItem(key);
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (!show) return;
+    try {
+      localStorage.setItem(key, "1");
+    } catch {
+      /* storage blocked: it may show again, which is harmless */
+    }
+  }, [show, key]);
+  if (!show) return null;
+  return (
+    <p className="first-moment flex items-center gap-2 font-medium" role="status">
+      <svg aria-hidden viewBox="0 0 20 20" className="size-5 text-accent" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="10" r="8.5" strokeWidth="1.6" />
+        <path d="M6.2 10.4l2.5 2.4 5-5.4" />
+      </svg>
+      First game analyzed.
+    </p>
   );
 }
 

@@ -2,7 +2,7 @@
 
 Read this whole file before doing anything. It holds every decision made so far for this project. If Noah asks something that is answered here, answer from here. When Noah makes a new decision (new stat, new sport, new rule), update the matching section of this file in the same session.
 
-**Status:** live on Vercel. Basketball and lacrosse Analyze flows are built (upload, trim, setup, Gemini analysis, derivations, review, export, segmenting, appearance notes) but **not yet tested on a real clip** (waiting on the Gemini key and a test clip). The real Season tab is not built; a simulated Season trends demo exists on `/test` (section 20). Start each new phase in plan mode.
+**Status:** live on Vercel. Everything in sections 5–13 is built: basketball and lacrosse Analyze (upload, trim, setup, multi-pass Gemini analysis, scoreboard readability check, derivations, plus/minus and minutes, review, export, segmenting, appearance notes) and the real **Season trends** tab (spreadsheet parsing, trends, verified Claude summary, XLSX). **Not yet tested against the real APIs:** Gemini (needs the key and a test clip) and Claude (needs `ANTHROPIC_API_KEY`); both are tested against fakes. Start each new phase in plan mode.
 
 **Reminder for Noah (do this when setting up the real password):** the club password will be the club's Google Classroom password. Set it as `CLUB_PASSWORD` in Vercel, set `ALLOW_TEST_LOGIN=false`, remove the Test button, and redeploy. Never write the password itself into this file or the code.
 
@@ -71,9 +71,9 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
 **Upload without storing.** Vercel rejects request bodies over about 4.5 MB, so the video cannot pass through the server. The server starts a Gemini Files API resumable upload session and hands the upload URL to the browser, which uploads straight to Google. The API key never reaches the browser. **This is untested (CORS, browser behavior).** Make it the first spike (section 17). Fallbacks if it fails: a Vercel Blob client upload that is deleted right after analysis, or a local-only mode. Files uploaded to Gemini auto-delete after 48 hours; delete them explicitly as soon as the run finishes.
 
 **Analysis.**
-1. Optional scoreboard check: sample a frame and confirm the quarter, clock, and score digits are readable at the chosen resolution. Warn if not.
+1. Optional scoreboard check: sample a frame and confirm the quarter, clock, and score digits are readable at the chosen resolution. Warn if not. **Built** into the starters request (no extra cost); the starters screen warns and suggests High detail.
 2. **Appearance-notes pass:** one quick request on the start of the game produces notes like "#5 white, headband, tallest." It asks for **every starter: 5 per team in basketball and 10 per team in lacrosse** (`playersPerSide` in the sport config). Show them to the user to correct, with a notice that they will check again at the end. During the possession-log passes the AI reports `playerNoteUpdates` (substitutes coming in, numbers it can now read); the Review page shows the starters plus these updates under "Check the player notes". Pass the corrected notes as plain text into every later request (Gemini remembers nothing between requests). Discard after the run.
-3. **Possession-log pass(es):** ask Gemini for structured JSON (response schema, low temperature). Group stats into 2–3 passes (for example: shots and possessions; then turnovers, fouls, and rebounds; then experimental stats) because one huge checklist in one request lowers accuracy.
+3. **Possession-log pass(es):** ask Gemini for structured JSON (response schema, low temperature). Group stats into 2–3 passes (for example: shots and possessions; then turnovers, fouls, and rebounds; then experimental stats) because one huge checklist in one request lowers accuracy. **Built:** each logged stat has a `pass` in the sport config. Pass 1 = possessions, shots, context, shot details; pass 2 = turnovers, fouls, rebounds, assists, steals, blocks; pass 3 = substitutions (plus/minus, minutes). Passes 2–3 receive pass 1's numbered possession list and return events tagged with a possession number; code attaches them (by number, else by video time, else dropped with a warning). Only passes with checked stats run; the estimate multiplies cost by the number of passes.
 4. Each logged event includes: video timestamp, game clock and quarter (read from the scoreboard), and a one-line description of what was seen. This lets a human verify it and lets the click-to-jump work.
 5. **Long games:** use the video part's `start_offset` / `end_offset` (static processing mode) to run 3–4 requests in parallel by quarter or half on the one uploaded file. Do not cut or re-upload files. Overlap segments by about 30 seconds and dedupe by quarter + game clock (fall back to video timestamp). Segment timestamps are relative to the original file, so keep them that way, and add the segment start back if the API reports times relative to the clip. Pass the appearance notes into every segment.
 6. **Scoreboard check:** sum the logged points per quarter and compare to the scoreboard score. A mismatch flags that quarter for review instead of silently filling the sheets. This is the main accuracy safeguard. Show it prominently.
@@ -137,7 +137,7 @@ The tiers below are my best guesses, **untested**. Test them on real footage and
 - **Reliable, AI-logged:** shot attempts and makes (2PT, 3PT, FT), possession context (M/Z/F), turnovers, fouls, quarter and clock (from scoreboard).
 - **Reliable, derived in code:** points (formula in section 10), offensive efficiency, points per possession, pace (possessions per quarter), score by quarter, scoreboard check, second-chance points, points off turnovers, fast-break points, team totals, turnovers and fouls by quarter.
 - **Decent, AI-logged (needs review):** turnover type (steal, bad pass, travel, and so on), steals, offensive and defensive rebounds, assists, blocks, shot type (drive, catch-and-shoot, pull-up), shot zone (paint, mid-range, corner 3, above-the-break 3), shooter jersey number.
-- **Experimental:** exact possession time (video is sampled about once per second, so expect plus or minus 1–2 seconds), contested vs open shots, per-player plus/minus for the starting five (needs on-court tracking and jersey reading all game), minutes on court.
+- **Experimental:** exact possession time (video is sampled about once per second, so expect plus or minus 1–2 seconds), contested vs open shots, per-player plus/minus for the starting five (needs on-court tracking and jersey reading all game), minutes on court. **Plus/minus and minutes are built** (`lib/derive/plus-minus.ts`): pass 3 logs substitutions, the starters screen has editable starter-number boxes, Total = sum of quarters, OT shows N/A when there was none, and minutes come from the game clock (blank when under 80% of possessions have clock readings).
 - **Easy derived adds not yet requested (my suggestions):** FG%, 3P%, FT%, effective FG%, turnover rate. Offer these to Noah.
 
 ### Lacrosse (second priority)
@@ -198,7 +198,9 @@ Be tolerant: merged cells, blank headers, cosmetic big letters, tracker-name cel
 - Show how many relationships were tested ("we tested 30 pairs; some strong-looking ones are likely chance at this sample size"). Do not cherry-pick.
 - Say "goes together with," never "causes."
 - **Graphs only where they are meaningful**, not for everything: correlations that pass the thresholds, and comparisons that matter (such as efficiency by M / Z / F). Each graph states n and the correlation strength.
-- Use a lightweight chart library (pick one).
+- Use a lightweight chart library (pick one). **Decision:** hand-written SVG charts (`components/season/charts.tsx`), no library.
+
+**Built (`/season`, shared with `/test`):** `lib/season/parse.ts` reads .xlsx (read-excel-file), CSV and pasted tabs in the browser and detects each sheet type from header words; `lib/season/model.ts` builds per-game numbers and tests every metric × outcome pair (≥10 games, |r| ≥ 0.5; pairs linked by arithmetic, like possessions vs efficiency, are excluded). The club's sheets have no opponent score, so the tab has **optional final-score boxes** that enable win/loss and margin trends. `/api/claude/season` sends only computed numbers (`CLAUDE_MODEL`, default `claude-sonnet-5-5`, refusal fallback on) and `lib/season/verify.ts` removes any sentence with a number not in that data. The app's CSV downloads are named `<Opponent> - <sheet-id>.csv` so they read back in as one game; opponent-view exports are skipped. XLSX download: games, by-situation, and pairs tested.
 
 ## 14. Privacy, safety, spend
 
@@ -289,7 +291,7 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 - **The trim timeline is the most "Apple" interaction in the app.** Respond on pointer-down. Track 1:1 with the pointer using pointer capture, respecting where the user grabbed the handle. Rubber-band at the ends. Snap with a critically damped spring, and use a hint of bounce only after a flick. Keep it interruptible (grab it mid-motion and it follows the finger).
 - **Progress:** a linear bar for constant motion; stage changes crossfade or slide with `--ease-out`; the ETA text updates without animation.
 - **Copy button:** the label changes to "Copied" with a short crossfade (blur 2px can mask a rough one). This is the feedback purpose.
-- Delight only at rare moments (for example, a first completed analysis). Keep it small.
+- Delight only at rare moments (for example, a first completed analysis). Keep it small. **Built:** a one-time "First game analyzed" check mark; the stage list fades between stages.
 - Review motion at 2–5× slower speed, frame by frame in the DevTools animation panel, test the trim gestures on a real phone, and look again the next day.
 
 ## 20. The /test simulation page
@@ -298,4 +300,4 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 
 - **Made-up data is allowed ONLY on `/test`**, and it is labeled as simulated on the page and above every result. **Never** use simulated or invented data on the real Analyze page or the real Season tab (section 3, rule 1).
 - Each simulated game plants one scoring mistake (the third quarter when it has a score) so the scoreboard check visibly catches it.
-- The simulated season (18 made-up games) uses the real statistics code in `lib/season/stats.ts` (Pearson r, minimum games, minimum |r|), which the real Season tab should reuse. Charts are hand-written SVG in `components/season/charts.tsx` (no chart library).
+- The simulated season (18 basketball and 12 lacrosse made-up games, `lib/demo/season.ts`) is written as rows in the club's sheet layouts and runs through the **same** Season tab, parser and math as the real one. Its summary is filled in from the computed numbers without calling an AI.
