@@ -65,6 +65,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const uploadAbort = useRef<AbortController | null>(null);
   const runAbort = useRef<AbortController | null>(null);
   const geminiName = useRef<string | null>(null);
+  /** The real reason the last upload failed, so Analyze can show it instead of a generic message. */
+  const uploadError = useRef<string | null>(null);
   /** Signed pass from the Roslyn-game check; every analysis request carries it. */
   const clearance = useRef<string | null>(null);
   /** Owner-only unlock (typed on the upload screen, no UI). Lives in this tab only. */
@@ -154,6 +156,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     const ctrl = new AbortController();
     uploadAbort.current = ctrl;
     setUpload({ status: "uploading", progress: 0 });
+    uploadError.current = null;
     try {
       const uploaded = await backend.upload(f, (p) => setUpload({ status: "uploading", progress: p }), ctrl.signal);
       geminiName.current = uploaded.name;
@@ -162,7 +165,11 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       setUpload({ status: "ready", file: active });
       return active;
     } catch (err) {
-      if (!ctrl.signal.aborted) setUpload({ status: "error", message: err instanceof Error ? err.message : "Upload failed." });
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      if (!ctrl.signal.aborted) {
+        uploadError.current = message;
+        setUpload({ status: "error", message });
+      }
       return null;
     }
   }, [backend]);
@@ -245,7 +252,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       if (!gfile) {
         setRun({ phase: "uploading" });
         gfile = file ? await (upload?.status === "error" || !geminiName.current ? startUpload(file) : backend.waitForActive(geminiName.current, ctrl.signal)) : null;
-        if (!gfile) throw new ApiError("The upload didn't finish. Check your connection and try again.", 0);
+        if (!gfile) throw new ApiError(uploadError.current ?? "The upload didn't finish. Check your connection and try again.", 0);
       }
       // The Roslyn-game check runs first and gates everything else (owner unlock aside, no bypass).
       setRun({ phase: "gate" });
