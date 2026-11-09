@@ -14,6 +14,27 @@ const TIERS: { tier: Tier; title: string; blurb: string }[] = [
 
 const COMMON_COLORS = ["Blue", "White"];
 
+// One look for every choice button: nothing appears chosen until it is, and a
+// chosen button gets the accent border, a light accent fill, and a check mark.
+const choiceClass = (selected: boolean) =>
+  `btn border ${selected ? "border-accent bg-[oklch(from_var(--accent)_l_c_h/0.1)] text-text" : "border-border-strong bg-surface"}`;
+
+function Jersey({ fill }: { fill: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" className="size-5 shrink-0">
+      <path d="M7 2.5h6l1.2 2.2 3.3 1.6-1.6 3.6-1.9-.7V17.5H6V9.2l-1.9.7-1.6-3.6 3.3-1.6z" fill={fill} stroke="var(--border-strong)" strokeWidth="1.1" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Check({ on }: { on: boolean }) {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className={`size-4 shrink-0 text-accent ${on ? "" : "hidden"}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 8.4l2.9 2.8 6.1-6.4" />
+    </svg>
+  );
+}
+
 /** A choice of two buttons plus "Other" with a text box. */
 function ColorPicker({ value, onChange, invalid }: { value: string; onChange: (v: string) => void; invalid: boolean }) {
   const isCommon = COMMON_COLORS.some((c) => c.toLowerCase() === value.trim().toLowerCase());
@@ -33,10 +54,12 @@ function ColorPicker({ value, onChange, invalid }: { value: string; onChange: (v
                 setOther(false);
                 onChange(c.toLowerCase());
               }}
-              className={`btn min-w-24 border ${selected ? "border-accent bg-surface ring-2 ring-[oklch(from_var(--accent)_l_c_h/0.25)]" : "border-border-strong bg-surface"}`}
+              className={`${choiceClass(selected)} min-w-24`}
             >
-              <span aria-hidden className={`size-3.5 rounded-full border border-border-strong ${c === "Blue" ? "bg-[oklch(0.45_0.15_255)]" : "bg-white"}`} />
+              {/* A little jersey in that color: a filled dot or square read as an already-ticked control. */}
+              <Jersey fill={c === "Blue" ? "oklch(0.45 0.15 255)" : "#ffffff"} />
               {c}
+              <Check on={selected} />
             </button>
           );
         })}
@@ -48,9 +71,10 @@ function ColorPicker({ value, onChange, invalid }: { value: string; onChange: (v
             setOther(true);
             if (isCommon) onChange("");
           }}
-          className={`btn border ${other ? "border-accent bg-surface ring-2 ring-[oklch(from_var(--accent)_l_c_h/0.25)]" : "border-border-strong bg-surface"}`}
+          className={choiceClass(other)}
         >
           Other
+          <Check on={other} />
         </button>
       </div>
       {other && (
@@ -102,9 +126,10 @@ export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetu
                 role="radio"
                 aria-checked={setup.sportId === s.id}
                 onClick={() => s.id !== setup.sportId && onChange({ ...setup, sportId: s.id, statIds: defaultStatIds(s) })}
-                className={`btn min-w-28 border ${setup.sportId === s.id ? "border-accent bg-surface ring-2 ring-[oklch(from_var(--accent)_l_c_h/0.25)]" : "border-border-strong bg-surface"}`}
+                className={`${choiceClass(setup.sportId === s.id)} min-w-28`}
               >
                 {s.label}
+                <Check on={setup.sportId === s.id} />
               </button>
             ))}
           </div>
@@ -113,7 +138,7 @@ export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetu
         <div>
           <span className="label">Roslyn&apos;s jerseys</span>
           <ColorPicker value={setup.roslynColor} onChange={(v) => set("roslynColor", v)} invalid={tried && missing.roslynColor} />
-          {err("roslynColor", "Pick or type a color.")}
+          {err("roslynColor", "Pick Blue, White, or Other.")}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
