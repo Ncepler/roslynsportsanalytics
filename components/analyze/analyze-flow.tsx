@@ -67,7 +67,35 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const geminiName = useRef<string | null>(null);
   /** Signed pass from the Roslyn-game check; every analysis request carries it. */
   const clearance = useRef<string | null>(null);
+  /** Owner-only unlock (typed on the upload screen, no UI). Lives in this tab only. */
+  const adminToken = useRef<string | null>(null);
+  const [unlockedFlash, setUnlockedFlash] = useState(false);
   const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
+
+  // Hidden owner unlock: on the upload screen, typing the 10-digit code (checked
+  // by the server against ADMIN_BYPASS_CODE) shows a check mark for a second.
+  useEffect(() => {
+    if (step !== 0 || demo) return;
+    let typed = "";
+    let lastTried = "";
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey || !/^\d$/.test(e.key)) return;
+      typed = (typed + e.key).slice(-10);
+      if (typed.length < 10 || typed === lastTried) return;
+      lastTried = typed;
+      fetch("/api/admin/unlock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: typed }) })
+        .then((r) => r.json())
+        .then((r: { ok?: boolean; token?: string }) => {
+          if (!r.ok || !r.token) return;
+          adminToken.current = r.token;
+          setUnlockedFlash(true);
+          setTimeout(() => setUnlockedFlash(false), 1000);
+        })
+        .catch(() => {});
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step, demo]);
 
   const go = useCallback((s: StepIndex) => {
     setStep(s);
@@ -219,10 +247,10 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
         gfile = file ? await (upload?.status === "error" || !geminiName.current ? startUpload(file) : backend.waitForActive(geminiName.current, ctrl.signal)) : null;
         if (!gfile) throw new ApiError("The upload didn't finish. Check your connection and try again.", 0);
       }
-      // The Roslyn-game check runs first and gates everything else (no bypass).
+      // The Roslyn-game check runs first and gates everything else (owner unlock aside, no bypass).
       setRun({ phase: "gate" });
       const whole = { start: ranges[0].start, end: ranges[ranges.length - 1].end };
-      const gate = await backend.gate(gfile, whole, setup.sportId, ctrl.signal);
+      const gate = await backend.gate(gfile, whole, setup.sportId, ctrl.signal, adminToken.current ?? undefined);
       if (!gate.pass) {
         await cleanupGemini();
         setRun({ phase: "rejected", reason: gate.reason });
@@ -301,6 +329,11 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
   return (
     <div>
+      {unlockedFlash && (
+        <div aria-hidden className="pointer-events-none fixed right-4 top-16 z-50 text-2xl">
+          ✅
+        </div>
+      )}
       <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} />
 
       {file && step !== 0 && <UploadStatus upload={upload} fileName={file.name} onRetry={() => file && void startUpload(file)} />}

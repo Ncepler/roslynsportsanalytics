@@ -1,7 +1,7 @@
 // The Roslyn-game check. Runs before any expensive request: a short look at
 // three ~20 s clips from the start, middle, and end of the trimmed game. The
 // run only continues if the AI sees the chosen sport being played AND visible
-// proof that one team is Roslyn. There is no bypass: the server signs a pass
+// proof that one team is Roslyn. The only bypass is the owner-only code (app/api/admin/unlock). The server signs a pass
 // for this exact file, sport, and time range, and every analysis request
 // requires it (app/api/gemini/analyze).
 //
