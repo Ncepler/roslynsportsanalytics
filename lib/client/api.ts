@@ -40,11 +40,11 @@ export type GeminiFile = { name: string; uri: string; mimeType: string; state: s
  */
 export async function uploadToGemini(file: File, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<GeminiFile> {
   const mimeType = normalizeVideoType(file);
-  const { ticket } = await api<{ ticket: string }>("/api/gemini/upload", { body: { size: file.size, mimeType } });
+  const { ticket, chunkSize } = await api<{ ticket: string; chunkSize: number }>("/api/gemini/upload", { body: { size: file.size, mimeType } });
 
   // Browsers can't upload to Google directly (CORS), so the video goes in
   // 4 MiB pieces through our server, which relays each one and stores nothing.
-  const CHUNK = 4 * 1024 * 1024;
+  const CHUNK = chunkSize;
   let raw = "";
   for (let offset = 0; offset < file.size; offset += CHUNK) {
     const end = Math.min(offset + CHUNK, file.size);

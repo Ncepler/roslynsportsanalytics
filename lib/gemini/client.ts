@@ -49,7 +49,9 @@ export async function startResumableUpload(opts: { size: number; mimeType: strin
   if (!res.ok || !uploadUrl) {
     throw Object.assign(new Error(`Gemini refused the upload session (HTTP ${res.status}).`), { status: res.status });
   }
-  return uploadUrl;
+  // Google says what piece size it accepts (every piece but the last must be a multiple of it).
+  const granularity = Number(res.headers.get("x-goog-upload-chunk-granularity")) || 262144;
+  return { uploadUrl, granularity };
 }
 
 export async function getFile(name: string) {

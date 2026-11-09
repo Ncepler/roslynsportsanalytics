@@ -38,6 +38,11 @@ export async function POST(request: Request) {
     return jsonError(502, "Couldn't reach Gemini while uploading. Try again.");
   }
   const text = await res.text();
-  if (!res.ok) return jsonError(502, `Gemini rejected part of the upload (HTTP ${res.status}).`);
+  if (!res.ok) {
+    // Google's own wording (about the upload, never about the video's content) so problems can be diagnosed.
+    const detail = text.replace(/\s+/g, " ").slice(0, 200);
+    console.error("Gemini chunk rejected:", res.status, offset, bytes.byteLength, res.headers.get("x-goog-upload-status"), detail);
+    return jsonError(502, `Gemini rejected part of the upload (HTTP ${res.status}, piece at ${offset}, ${bytes.byteLength} bytes${detail ? `: ${detail}` : ""}).`);
+  }
   return last ? NextResponse.json({ file: JSON.parse(text).file }) : NextResponse.json({ ok: true });
 }
