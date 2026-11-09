@@ -58,10 +58,12 @@ async function runOne(
 export type GateOutcome = { pass: true; evidence: string; clearance: string } | { pass: false; reason: string };
 
 /** The Roslyn-game check (lib/gemini/gate.ts): a short look at three clips before anything expensive runs. */
-export async function runGate(file: GeminiFile, range: Range, sportId: string, signal: AbortSignal): Promise<GateOutcome> {
-  const { id, ticket } = await api<{ id: string; ticket: string }>("/api/gemini/gate", {
-    body: { uri: file.uri, mimeType: file.mimeType, start: range.start, end: range.end, sportId },
+export async function runGate(file: GeminiFile, range: Range, sportId: string, signal: AbortSignal, adminToken?: string): Promise<GateOutcome> {
+  const first = await api<{ id?: string; ticket?: string; bypass?: boolean; clearance?: string }>("/api/gemini/gate", {
+    body: { uri: file.uri, mimeType: file.mimeType, start: range.start, end: range.end, sportId, adminToken },
   });
+  if (first.bypass && first.clearance) return { pass: true, evidence: "Owner unlock", clearance: first.clearance };
+  const { id, ticket } = first as { id: string; ticket: string };
   const giveUpAt = Date.now() + 10 * 60 * 1000;
   for (;;) {
     if (signal.aborted) throw new ApiError("Cancelled.", 0);

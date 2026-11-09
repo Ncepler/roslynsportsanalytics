@@ -18,7 +18,7 @@ export type Backend = {
   /** Real token count for a range, or null when unavailable. */
   countTokens(file: GeminiFile, range: Range, resolution: Resolution): Promise<number | null>;
   /** The Roslyn-game check. Every later request needs the clearance it returns. */
-  gate(file: GeminiFile, range: Range, sportId: string, signal: AbortSignal): Promise<GateOutcome>;
+  gate(file: GeminiFile, range: Range, sportId: string, signal: AbortSignal, adminToken?: string): Promise<GateOutcome>;
   appearance(range: Range, video: VideoOpts, setup: GameSetup, signal: AbortSignal): Promise<AppearanceResult>;
   possessionLog(
     segments: Segment[],

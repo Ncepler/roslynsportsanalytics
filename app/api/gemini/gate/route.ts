@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
-import { signToken } from "@/lib/auth/session";
+import { signToken, verifyToken } from "@/lib/auth/session";
 import { startClipsInteraction } from "@/lib/gemini/client";
-import { gateClips, gatePrompt, gateSchema } from "@/lib/gemini/gate";
+import { CLEARANCE_TTL_SECONDS, gateClips, gatePrompt, gateSchema } from "@/lib/gemini/gate";
 import { parseVideoRange } from "@/lib/gemini/validate";
 import { getSport } from "@/lib/sports";
 
@@ -20,6 +20,13 @@ export async function POST(request: Request) {
     if (typeof range === "string") return jsonError(400, range);
     const sport = typeof body?.sportId === "string" ? getSport(body.sportId) : undefined;
     if (!sport) return jsonError(400, "Unknown sport.");
+
+    // Owner unlock (app/api/admin/unlock): skips the AI look, signs the same pass.
+    const admin = typeof body?.adminToken === "string" ? await verifyToken(body.adminToken) : null;
+    if (admin?.t === "admin") {
+      const clearance = await signToken({ t: "clear", uri: range.uri, sport: sport.id, start: range.start, end: range.end }, CLEARANCE_TTL_SECONDS);
+      return NextResponse.json({ bypass: true, clearance });
+    }
 
     const clips = gateClips(range);
     const id = await startClipsInteraction({ uri: range.uri, mimeType: range.mimeType, clips, resolution: "high", prompt: gatePrompt(sport, clips), schema: gateSchema });
