@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
+import { verifyToken } from "@/lib/auth/session";
 import { startVideoInteraction } from "@/lib/gemini/client";
+import { withinClearance, type Clearance } from "@/lib/gemini/gate";
 import { appearancePrompt, appearanceSchema, eventsPassPrompt, eventsPassSchema, possessionLogPrompt, possessionLogSchema } from "@/lib/gemini/prompt";
 import { parsePossessionRefs, parseSetup, parseVideoRange } from "@/lib/gemini/validate";
 import { getSport } from "@/lib/sports";
@@ -19,6 +21,12 @@ export async function POST(request: Request) {
     const setup = parseSetup(body?.setup);
     if (typeof setup === "string") return jsonError(400, setup);
     const sport = getSport(setup.sportId)!;
+
+    // No pass from the Roslyn-game check, no analysis (lib/gemini/gate.ts). No bypass.
+    const clearance = (await verifyToken(body?.clearance)) as Clearance | null;
+    if (!clearance || !withinClearance(clearance, range.uri, sport.id, range.start, range.end)) {
+      return jsonError(403, "This video hasn't passed the Roslyn-game check.");
+    }
 
     // kind: "appearance" = starters + scoreboard check; "log" = pass 1, the
     // possession list; "events" = pass 2 or 3, adding events to pass 1's list.

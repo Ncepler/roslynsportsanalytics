@@ -8,30 +8,35 @@ import type { Estimate, UploadState } from "./analyze-flow";
 export type RunState =
   | { phase: "idle" }
   | { phase: "uploading" }
+  | { phase: "gate" }
+  | { phase: "rejected"; reason: string }
   | { phase: "appearance" }
-  | { phase: "notes"; appearance: AppearanceResult; started: number }
+  | { phase: "notes"; appearance: AppearanceResult; started: number; evidence: string }
   | { phase: "logging"; done: number; total: number; started: number }
   | { phase: "checking" }
   | { phase: "building" }
   | { phase: "done"; usage: RunUsage; raw: string[] }
   | { phase: "error"; message: string };
 
-const STAGES = ["Uploading", "Processing", "Reading the game", "Logging possessions", "Checking totals", "Building tables"] as const;
+const STAGES = ["Uploading", "Processing", "Checking it's a Roslyn game", "Reading the game", "Logging possessions", "Checking totals", "Building tables"] as const;
+const LOGGING_STAGE = 4;
 
 function stageIndex(run: RunState, upload: UploadState | null): number {
   switch (run.phase) {
     case "uploading":
       return upload?.status === "processing" ? 1 : 0;
+    case "gate":
+      return 2;
     case "appearance":
     case "notes":
-      return 2;
-    case "logging":
       return 3;
-    case "checking":
+    case "logging":
       return 4;
+    case "checking":
+      return 5;
     case "building":
     case "done":
-      return 5;
+      return 6;
     default:
       return -1;
   }
@@ -52,6 +57,7 @@ export function RunStep({
   awayName = "Opponent",
   onCancel,
   onBack,
+  onNewVideo,
   demo = false,
 }: {
   keptSeconds: number;
@@ -70,13 +76,15 @@ export function RunStep({
   awayName?: string;
   onCancel: () => void;
   onBack: () => void;
+  /** After a failed Roslyn-game check: back to choosing a video. */
+  onNewVideo: () => void;
   demo?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [notes, setNotes] = useState(run.phase === "notes" ? run.appearance.notes : "");
   const [starters, setStarters] = useState<{ roslyn: string[]; opponent: string[] }>({ roslyn: [], opponent: [] });
   const [now, setNow] = useState(() => performance.now());
-  const running = !["idle", "error", "done"].includes(run.phase);
+  const running = !["idle", "error", "done", "rejected"].includes(run.phase);
   // The cost confirm only shows on /test (to demonstrate it); club members on the real page don't manage spend.
   const needsConfirm = demo && (estimate?.cost ?? 0) > 0;
 
@@ -99,6 +107,29 @@ export function RunStep({
   const current = stageIndex(run, upload);
   const remainingMin =
     run.phase === "logging" && estimate ? Math.max(1, Math.round((estimate.seconds - (now - run.started) / 1000) / 60)) : null;
+
+  // No bypass button by design: the check protects the club's Gemini credits.
+  if (run.phase === "rejected") {
+    return (
+      <div className="max-w-2xl">
+        <h2 className="text-xl font-semibold tracking-[-0.01em]">This video can&apos;t be analyzed</h2>
+        <p role="alert" className="mt-3 rounded-[0.625rem] border border-warning-border bg-warning-bg px-3 py-2 text-[0.9375rem] text-warning-text">
+          {run.reason}
+        </p>
+        <p className="mt-3 text-muted">
+          This app only analyzes Roslyn games. It checks short clips from the start, middle, and end of the trimmed video for the sport you picked and for &ldquo;Roslyn&rdquo; on the jerseys, scoreboard, or court. The video was deleted and nothing else ran.
+        </p>
+        <div className="mt-6 flex gap-2">
+          <button type="button" className="btn btn-ghost" onClick={onBack}>
+            Back to setup
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onNewVideo}>
+            Choose a different video
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (run.phase === "notes") {
     const sb = run.appearance.scoreboard;
@@ -123,6 +154,14 @@ export function RunStep({
         <p className="mt-1 text-muted">
           The AI watched the start of the game and described every starter. Fix anything wrong, especially jersey numbers.
         </p>
+        {run.evidence && (
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-muted">
+            <svg aria-hidden viewBox="0 0 16 16" className="size-4 shrink-0 text-accent" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.5 8.4l2.9 2.8 6.1-6.4" />
+            </svg>
+            <span>Roslyn game confirmed: {run.evidence}</span>
+          </p>
+        )}
         {unreadable && (
           <p role="alert" className="mt-3 rounded-[0.625rem] border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-text">
             <span className="font-semibold">The AI couldn&apos;t read the scoreboard clearly</span>
@@ -243,7 +282,7 @@ export function RunStep({
           <ol className="space-y-2.5">
             {STAGES.map((label, i) => {
               const state = i < current ? "done" : i === current ? "active" : "todo";
-              const detail = i === 3 && run.phase === "logging" ? ` · ${run.done} of ${run.total} steps done` : "";
+              const detail = i === LOGGING_STAGE && run.phase === "logging" ? ` · ${run.done} of ${run.total} steps done` : "";
               return (
                 // Stage change: opacity crossfade with --ease-out (section 19); durations drop to 0 under reduced motion.
                 <li

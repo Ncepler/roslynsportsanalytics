@@ -48,6 +48,12 @@ export function demoBackend(): Backend {
     async countTokens() {
       return null;
     },
+    // The simulation always shows a Roslyn game, so the check passes.
+    async gate(_file, _range, _sportId, signal) {
+      await sleep(1800);
+      check(signal);
+      return { pass: true, evidence: "ROSLYN across the home jerseys (simulated)", clearance: "simulated" };
+    },
     async appearance(_range, _video, setup, signal) {
       await sleep(2500);
       check(signal);
