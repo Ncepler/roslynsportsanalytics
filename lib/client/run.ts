@@ -20,7 +20,7 @@ const POLL_MS = 4000;
 /** One part of the game should never take this long; stop polling instead of waiting forever. */
 const RUN_TIMEOUT_MS = 30 * 60 * 1000;
 
-type VideoOpts = { file: GeminiFile; resolution: Resolution; fps?: number };
+type VideoOpts = { file: GeminiFile; resolution: Resolution; fps?: number; clearance?: string };
 
 async function runOne(
   kind: "log" | "appearance" | "events",
@@ -41,6 +41,7 @@ async function runOne(
       resolution: video.resolution,
       fps: video.fps,
       setup,
+      clearance: video.clearance,
     },
   });
   const giveUpAt = Date.now() + RUN_TIMEOUT_MS;
@@ -51,6 +52,27 @@ async function runOne(
     const r = await api<PollResult>(`/api/gemini/analyze/${encodeURIComponent(id)}`);
     if (r.status === "done") return r;
     if (r.status === "failed") throw new ApiError(r.error, 0);
+  }
+}
+
+export type GateOutcome = { pass: true; evidence: string; clearance: string } | { pass: false; reason: string };
+
+/** The Roslyn-game check (lib/gemini/gate.ts): a short look at three clips before anything expensive runs. */
+export async function runGate(file: GeminiFile, range: Range, sportId: string, signal: AbortSignal): Promise<GateOutcome> {
+  const { id, ticket } = await api<{ id: string; ticket: string }>("/api/gemini/gate", {
+    body: { uri: file.uri, mimeType: file.mimeType, start: range.start, end: range.end, sportId },
+  });
+  const giveUpAt = Date.now() + 10 * 60 * 1000;
+  for (;;) {
+    if (signal.aborted) throw new ApiError("Cancelled.", 0);
+    if (Date.now() > giveUpAt) throw new ApiError("The Roslyn-game check took too long. Try again.", 0);
+    await sleep(3000);
+    const r = await api<{ status: string; error?: string } & Partial<{ pass: boolean; evidence: string; clearance: string; reason: string }>>(
+      `/api/gemini/gate/${encodeURIComponent(id)}?ticket=${encodeURIComponent(ticket)}`,
+    );
+    if (r.status === "failed") throw new ApiError(r.error ?? "The Roslyn-game check failed. Try again.", 0);
+    if (r.status !== "done") continue;
+    return r.pass && r.clearance ? { pass: true, evidence: r.evidence ?? "", clearance: r.clearance } : { pass: false, reason: r.reason ?? "This video didn't pass the Roslyn-game check." };
   }
 }
 

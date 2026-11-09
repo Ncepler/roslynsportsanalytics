@@ -65,6 +65,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const uploadAbort = useRef<AbortController | null>(null);
   const runAbort = useRef<AbortController | null>(null);
   const geminiName = useRef<string | null>(null);
+  /** Signed pass from the Roslyn-game check; every analysis request carries it. */
+  const clearance = useRef<string | null>(null);
   const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
 
   const go = useCallback((s: StepIndex) => {
@@ -217,14 +219,24 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
         gfile = file ? await (upload?.status === "error" || !geminiName.current ? startUpload(file) : backend.waitForActive(geminiName.current, ctrl.signal)) : null;
         if (!gfile) throw new ApiError("The upload didn't finish. Check your connection and try again.", 0);
       }
-      const video = { file: gfile, resolution };
+      // The Roslyn-game check runs first and gates everything else (no bypass).
+      setRun({ phase: "gate" });
+      const whole = { start: ranges[0].start, end: ranges[ranges.length - 1].end };
+      const gate = await backend.gate(gfile, whole, setup.sportId, ctrl.signal);
+      if (!gate.pass) {
+        await cleanupGemini();
+        setRun({ phase: "rejected", reason: gate.reason });
+        return;
+      }
+      clearance.current = gate.clearance;
+      const video = { file: gfile, resolution, clearance: gate.clearance };
       const runSetup: GameSetup = { ...setup };
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
       const appearance = await backend.appearance({ start: first.start, end: Math.min(first.end, first.start + APPEARANCE_SECONDS) }, video, runSetup, ctrl.signal);
       // Pause for the user to correct the notes; continueRun picks up from here.
-      setRun({ phase: "notes", appearance, started });
+      setRun({ phase: "notes", appearance, started, evidence: gate.evidence });
     } catch (err) {
       failRun(err, ctrl);
     }
@@ -242,7 +254,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       };
       setStarterNumbers(starters.roslyn.filter(Boolean));
       setRun({ phase: "logging", done: 0, total: segments.length * passCount, started });
-      const result = await backend.possessionLog(segments, { file: gfile, resolution }, runSetup, ctrl.signal, (done, total) =>
+      const result = await backend.possessionLog(segments, { file: gfile, resolution, clearance: clearance.current ?? undefined }, runSetup, ctrl.signal, (done, total) =>
         setRun({ phase: "logging", done, total, started }),
       );
       setRun({ phase: "checking" });
@@ -268,6 +280,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   async function cleanupGemini() {
     const name = geminiName.current;
     geminiName.current = null;
+    clearance.current = null;
     if (name) await backend.deleteFile(name);
     setUpload(null);
   }
@@ -364,7 +377,14 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             starterBoxes={setup.statIds.includes("plus-minus") ? (getSport(setup.sportId)?.playersPerSide ?? 0) : 0}
             awayName={setup.awayName || "Opponent"}
             onCancel={cancelRun}
-            onBack={() => go(2)}
+            onBack={() => {
+              if (run.phase === "rejected") setRun({ phase: "idle" });
+              go(2);
+            }}
+            onNewVideo={() => {
+              setRun({ phase: "idle" });
+              go(0);
+            }}
             demo={demo}
           />
         )}

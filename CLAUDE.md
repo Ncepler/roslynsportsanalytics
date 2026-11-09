@@ -34,6 +34,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 6. **API keys are server-only.** Never expose them to the browser. Never commit them. Use `.env.local` and Vercel env vars, and add `.env*` to `.gitignore`.
 7. **Every page and every API route sits behind the password gate** (section 12). Protecting only the page is not enough.
 8. **The Season tab's AI never produces numbers.** It may suggest what to test and write plain-English summaries, but only from numbers the code computed.
+9. **Roslyn games only, no bypass (Noah, Nov 9).** Before any expensive request, a short check (`lib/gemini/gate.ts`) looks at three ~20 s clips (start, middle, end of the trimmed game, High detail, about 1–2 cents). It must see the chosen sport as an organized game and read "Roslyn" (or "ROS" as a scoreboard team label) somewhere; jersey colors alone don't count. The pass/fail rule is in code, and the prompt holds no user-typed text. On a fail the video is deleted from Gemini, nothing else runs, and the screen offers only "Back to setup" / "Choose a different video". The server signs a pass (HMAC, 6 h) for that file, sport, and time range, and `/api/gemini/analyze` returns 403 without it. Never add a bypass button or override.
 
 ## 4. Stack
 
@@ -80,7 +81,7 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
 7. Run long jobs with Gemini background execution or streaming, and poll from the client every few seconds. Do not hold one Vercel function open for the whole analysis.
 8. **No database means job state lives in the browser tab** (interaction IDs, file URIs, partial results). If the tab closes mid-run, the user reruns (it costs cents). Say so in the UI.
 
-**Progress and time estimates.** Gemini does not report real progress. Stages shown: Uploading, Processing, Reading the game (appearance notes), Logging possessions ("3 of 4 sections done" is real progress when segmenting), Checking totals, Building tables. The ETA is an estimate from video length and from how long past runs took (calibrate with `localStorage`). Label it "estimate" on screen. The estimate for time and cost also updates live as the user drags the trim markers, using `count_tokens` where possible.
+**Progress and time estimates.** Gemini does not report real progress. Stages shown: Uploading, Processing, Checking it's a Roslyn game, Reading the game (appearance notes), Logging possessions ("3 of 4 sections done" is real progress when segmenting), Checking totals, Building tables. The ETA is an estimate from video length and from how long past runs took (calibrate with `localStorage`). Label it "estimate" on screen. The estimate for time and cost also updates live as the user drags the trim markers, using `count_tokens` where possible.
 
 **Cost guard.** Show the estimated cost before the run. Enforce a maximum video duration per run (2 hours). **Noah decided (Nov 8): no cost-confirm checkbox on the real page** (students using it don't manage costs); the checkbox appears only on the `/test` simulation, to show the feature.
 
@@ -264,6 +265,7 @@ Acceptance check for each phase: run it on a real clip or sample, and show Noah 
 5. Roster entry format; whether to log opponent possessions in the sheets or only for checks.
 6. Whether time of possession is in seconds or M:SS. (Built as M:SS to match the sample.) Also open: in the possession-log sheet, are the 2PT / 3PT / FT cells makes, attempts, or points? Built as makes.
 7. ~~Brand colors~~ (answered: none for now; keep the slate-blue accent).
+8. The Roslyn-only check conflicts with section 14's free-tier rule (test only with non-student footage): a pro clip will always be rejected. So the first real test needs the paid tier and a real Roslyn game. Also unknown: how often real Roslyn footage shows readable "Roslyn" text (false rejections). Test on real games before relying on it.
 
 ## 19. Design
 

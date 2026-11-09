@@ -91,3 +91,35 @@ export async function safeEqual(a: string, b: string): Promise<boolean> {
   const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(a));
   return crypto.subtle.verify("HMAC", key, digest, encoder.encode(b));
 }
+
+// ---------- signed tokens for server-issued passes (e.g. the Roslyn-game check) ----------
+
+/**
+ * Signs a small JSON payload with the session secret, with an expiry. Used for
+ * passes the server issues and later requires (it can't be forged in the
+ * browser, so there is no client-side bypass).
+ */
+export async function signToken(payload: Record<string, unknown>, ttlSeconds: number): Promise<string> {
+  const body = toBase64Url(encoder.encode(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds })));
+  const signature = await crypto.subtle.sign("HMAC", await getKey(), encoder.encode(`tok.${body}`));
+  return `${body}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+/** The payload of a valid, unexpired token from signToken; null otherwise. */
+export async function verifyToken(token: unknown): Promise<Record<string, unknown> | null> {
+  if (typeof token !== "string" || token.length > 4000) return null;
+  const [body, signature, extra] = token.split(".");
+  if (!body || !signature || extra !== undefined) return null;
+  const sig = fromBase64Url(signature);
+  if (!sig) return null;
+  // The "tok." prefix keeps these tokens from ever validating as session cookies (and vice versa).
+  if (!(await crypto.subtle.verify("HMAC", await getKey(), sig, encoder.encode(`tok.${body}`)))) return null;
+  const bytes = fromBase64Url(body);
+  if (!bytes) return null;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+    return typeof payload.exp === "number" && payload.exp > Date.now() / 1000 ? payload : null;
+  } catch {
+    return null;
+  }
+}

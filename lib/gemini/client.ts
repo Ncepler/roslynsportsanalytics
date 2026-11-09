@@ -114,6 +114,35 @@ export async function startVideoInteraction(opts: {
   return interaction.id;
 }
 
+/** Starts a background request on several short clips of one video (the Roslyn-game check). */
+export async function startClipsInteraction(opts: {
+  uri: string;
+  mimeType: string;
+  clips: { start: number; end: number }[];
+  resolution: Resolution;
+  prompt: string;
+  schema: Record<string, unknown>;
+}) {
+  const interaction = await gemini().interactions.create({
+    model: geminiModel(),
+    background: true,
+    store: true,
+    input: [
+      ...opts.clips.map((c) => ({
+        type: "video" as const,
+        uri: opts.uri,
+        mime_type: opts.mimeType,
+        resolution: opts.resolution,
+        processing: { type: "static" as const, start_offset: seconds(c.start), end_offset: seconds(c.end) },
+      })),
+      { type: "text" as const, text: opts.prompt },
+    ],
+    generation_config: { temperature: 0 },
+    response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
+  });
+  return interaction.id;
+}
+
 export type InteractionResult =
   | { status: "running" }
   | { status: "failed"; error: string }
