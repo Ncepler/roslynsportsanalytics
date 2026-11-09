@@ -35,25 +35,24 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
 export type GeminiFile = { name: string; uri: string; mimeType: string; state: string; error: string | null };
 
 /**
- * Uploads the video straight from the browser to Gemini. The server only
- * opens the session; the bytes never touch Vercel.
+ * Uploads the video to Gemini in small pieces relayed by our server
+ * (app/api/gemini/chunk). Nothing is stored on Vercel.
  */
 export async function uploadToGemini(file: File, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<GeminiFile> {
   const mimeType = normalizeVideoType(file);
-  const { uploadUrl } = await api<{ uploadUrl: string }>("/api/gemini/upload", { body: { size: file.size, mimeType } });
+  const { ticket } = await api<{ ticket: string }>("/api/gemini/upload", { body: { size: file.size, mimeType } });
 
-  const raw = await new Promise<string>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", uploadUrl);
-    xhr.setRequestHeader("X-Goog-Upload-Command", "upload, finalize");
-    xhr.setRequestHeader("X-Goog-Upload-Offset", "0");
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.responseText) : reject(new ApiError(`Upload to Gemini failed (HTTP ${xhr.status}).`, xhr.status)));
-    xhr.onerror = () => reject(new ApiError("Upload to Gemini was blocked or lost. Check your connection and try again.", 0));
-    xhr.onabort = () => reject(new ApiError("Upload cancelled.", 0));
-    signal.addEventListener("abort", () => xhr.abort(), { once: true });
-    xhr.send(file);
-  });
+  // Browsers can't upload to Google directly (CORS), so the video goes in
+  // 4 MiB pieces through our server, which relays each one and stores nothing.
+  const CHUNK = 4 * 1024 * 1024;
+  let raw = "";
+  for (let offset = 0; offset < file.size; offset += CHUNK) {
+    const end = Math.min(offset + CHUNK, file.size);
+    const last = end >= file.size;
+    const text = await sendChunk(`/api/gemini/chunk?ticket=${encodeURIComponent(ticket)}&offset=${offset}&last=${last ? 1 : 0}`, file.slice(offset, end), signal, (loaded) => onProgress((offset + loaded) / file.size));
+    onProgress(end / file.size);
+    if (last) raw = text;
+  }
 
   const parsed = JSON.parse(raw) as { file?: { name?: string; uri?: string; mimeType?: string; state?: string } };
   if (!parsed.file?.name || !parsed.file.uri) throw new ApiError("Gemini didn't confirm the upload.", 0);
@@ -64,6 +63,27 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
     state: parsed.file.state ?? "PROCESSING",
     error: null,
   };
+}
+
+function sendChunk(url: string, body: Blob, signal: AbortSignal, onLoaded: (bytes: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onLoaded(e.loaded);
+    xhr.onload = () => {
+      if (xhr.status === 401) window.location.href = "/login";
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.responseText);
+      let message = `Upload failed (HTTP ${xhr.status}).`;
+      try {
+        message = (JSON.parse(xhr.responseText) as { error?: string }).error ?? message;
+      } catch {}
+      reject(new ApiError(message, xhr.status));
+    };
+    xhr.onerror = () => reject(new ApiError("Couldn't reach the server while uploading. Check your connection and try again.", 0));
+    xhr.onabort = () => reject(new ApiError("Upload cancelled.", 0));
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(body);
+  });
 }
 
 const PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;

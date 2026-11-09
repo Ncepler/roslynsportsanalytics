@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
+import { signToken } from "@/lib/auth/session";
 import { startResumableUpload } from "@/lib/gemini/client";
 import { MAX_UPLOAD_BYTES, isAllowedVideoType } from "@/lib/gemini/limits";
 
 export const maxDuration = 30;
 
-// Starts a Gemini resumable upload. Returns only the session URL; the browser
-// uploads the bytes directly to Google (CLAUDE.md section 6).
+// Starts a Gemini resumable upload. Returns a signed ticket for the session; the
+// browser sends the bytes in small pieces through /api/gemini/chunk, which
+// relays them to Google without storing anything (browsers are blocked from
+// uploading to Google directly by CORS).
 export async function POST(request: Request) {
   return guarded(request, async () => {
     const body = await readJson<{ size?: unknown; mimeType?: unknown }>(request);
@@ -20,6 +23,6 @@ export async function POST(request: Request) {
 
     // Display name is generic on purpose: no player or school names leave the app.
     const uploadUrl = await startResumableUpload({ size, mimeType, displayName: `game-${Date.now()}` });
-    return NextResponse.json({ uploadUrl });
+    return NextResponse.json({ ticket: await signToken({ t: "upload", uploadUrl }, 6 * 60 * 60) });
   });
 }
