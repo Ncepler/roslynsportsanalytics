@@ -28,7 +28,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 
 1. **No made-up data.** If the AI cannot see or read something, it returns `null` / `unknown` and flags it. Omission beats a guess. Never fill a gap with a plausible number.
 2. **AI logs events. Code does all the math.** The AI never adds, averages, or totals. Every total, efficiency, percentage, correlation, and graph value comes from code run on the logged rows.
-3. **No video storage.** Videos go from the browser straight to Gemini, get analyzed, and are deleted from Gemini right after. Nothing is stored on Vercel, in a database, or in logs. No database at all in v1.
+3. **No lasting video storage.** Videos go to Gemini (via a temporary Vercel Blob that is deleted within minutes, section 6), get analyzed, and are deleted from Gemini right after. Nothing is stored on Vercel, in a database, or in logs. No database at all in v1.
 4. **No persistent face data.** Appearance notes ("#5, white jersey, headband") live only for one run and are discarded. Never build a face-recognition store or send reference photos. The footage includes high school students (minors).
 5. **No scraping or ripping Hudl.** See section 15.
 6. **API keys are server-only.** Never expose them to the browser. Never commit them. Use `.env.local` and Vercel env vars, and add `.env*` to `.gitignore`.
@@ -43,7 +43,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 - No Supabase and no database in v1. (Noah's other projects use Supabase; this one does not need it because nothing is stored.)
 - **Gemini API** (`@google/genai` SDK) for watching video.
 - **Claude API** (Anthropic SDK) for the Season tab's hypotheses and write-ups. Verify current model names in the docs before hardcoding (as of this writing: `claude-sonnet-5-5` is a reasonable default). Put model names in env vars.
-- Env vars (all server-side): `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIER` (`free` or `paid`), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLUB_PASSWORD`, `ALLOW_TEST_LOGIN`, `SESSION_SECRET`.
+- Env vars (all server-side): `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIER` (`free` or `paid`), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLUB_PASSWORD`, `ALLOW_TEST_LOGIN`, `SESSION_SECRET`, `BLOB_READ_WRITE_TOKEN` (added by connecting a Vercel Blob store), `ADMIN_BYPASS_CODE`.
 - **Built so far (phase 1):** Next 16 + Tailwind 4. Next 16 renamed middleware to `proxy.ts` (runs on Node); it gates every page and API route. Tailwind 4 has no config file, so all design tokens live in `app/globals.css` (one accent: change `--accent-hue`). Session cookie code is in `lib/auth/`. Routes: `/` is Analyze a game, `/season` is Season trends, `/login`. Cache Components is on, so env-driven UI (Test button, free-tier banner) is fixed at build time; the login API still checks `ALLOW_TEST_LOGIN` on every request. Changing env vars on Vercel needs a redeploy.
 - Suggested layout (adjust as needed): `/lib/sports/basketball.ts`, `/lib/sports/lacrosse.ts` (sport configs), `/lib/gemini/` (upload, prompts, schemas, segmenting), `/lib/derive/` (all math), `/lib/sheets/` (layouts, copy/CSV export, Season parsing), `/lib/season/`, `/components/`.
 
@@ -70,7 +70,7 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
 
 ## 6. Video pipeline
 
-**Upload without storing.** Vercel rejects request bodies over about 4.5 MB, so the video cannot pass through the server. The server starts a Gemini Files API resumable upload session and hands the upload URL to the browser, which uploads straight to Google. The API key never reaches the browser. **Browser-direct upload failed in real use (CORS, Nov 9).** Now built as a relay: the server opens the session and the browser sends 4 MiB pieces through `/api/gemini/chunk`, which forwards each to Google and stores nothing. Untested on large files (Google may need chunk sizes of a certain multiple). Make it the first spike (section 17). Fallbacks if it fails: a Vercel Blob client upload that is deleted right after analysis, or a local-only mode. Files uploaded to Gemini auto-delete after 48 hours; delete them explicitly as soon as the run finishes.
+**Upload (changed Nov 9).** Browser-direct upload to Gemini failed (CORS), and relaying through the server fails too: Google requires 8 MiB pieces, Vercel allows 4.5 MB bodies. Now: the browser uploads to a **temporary Vercel Blob** (`/api/blob/upload` gives a token; needs a Blob store connected to the project, env `BLOB_READ_WRITE_TOKEN`), then `/api/gemini/import` streams it to Gemini in one request and **deletes the Blob right away, success or failure**. This is the one exception to rule 3's "nothing stored on Vercel": the video sits on Vercel only for the minutes the hand-off takes. Untested on very large files (function limit 300 s). Files uploaded to Gemini auto-delete after 48 hours; delete them explicitly as soon as the run finishes.
 
 **Analysis.**
 1. Optional scoreboard check: sample a frame and confirm the quarter, clock, and score digits are readable at the chosen resolution. Warn if not. **Built** into the starters request (no extra cost); the starters screen warns and suggests High detail.
