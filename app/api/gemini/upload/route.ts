@@ -22,7 +22,13 @@ export async function POST(request: Request) {
     if (size > MAX_UPLOAD_BYTES) return jsonError(413, "That video is over 2 GB. Trim or compress it first.");
 
     // Display name is generic on purpose: no player or school names leave the app.
-    const uploadUrl = await startResumableUpload({ size, mimeType, displayName: `game-${Date.now()}` });
-    return NextResponse.json({ ticket: await signToken({ t: "upload", uploadUrl }, 6 * 60 * 60) });
+    const { uploadUrl, granularity } = await startResumableUpload({ size, mimeType, displayName: `game-${Date.now()}` });
+    // Largest valid piece that fits under Vercel's 4.5 MB request limit.
+    const MAX_PIECE = 4 * 1024 * 1024;
+    const chunkSize = Math.floor(MAX_PIECE / granularity) * granularity;
+    if (chunkSize === 0 && size > granularity) {
+      return jsonError(501, `Gemini needs upload pieces of ${granularity} bytes, which is too big to relay through the server (limit ${MAX_PIECE}). Needs a different upload route.`);
+    }
+    return NextResponse.json({ ticket: await signToken({ t: "upload", uploadUrl }, 6 * 60 * 60), chunkSize: chunkSize || MAX_PIECE });
   });
 }
