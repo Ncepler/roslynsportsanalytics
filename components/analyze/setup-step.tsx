@@ -92,7 +92,7 @@ function ColorPicker({ value, onChange, invalid }: { value: string; onChange: (v
   );
 }
 
-export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetup; onChange: (s: GameSetup) => void; onNext: () => void; onBack: () => void }) {
+export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: { setup: GameSetup; onChange: (s: GameSetup) => void; onNext: () => void; onBack: () => void; /** The sport and opponent come from the chosen game, so they can't be changed here. */ locked?: boolean }) {
   const [tried, setTried] = useState(false);
   const sport = getSport(setup.sportId)!;
   const set = <K extends keyof GameSetup>(k: K, v: GameSetup[K]) => onChange({ ...setup, [k]: v });
@@ -116,6 +116,7 @@ export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetu
       <h2 className="text-xl font-semibold tracking-[-0.01em]">Who&apos;s playing?</h2>
 
       <div className="mt-6 space-y-6 sm:max-w-xl">
+        {!locked && (
         <div>
           <span className="label">Sport</span>
           <div className="flex gap-2" role="radiogroup" aria-label="Sport">
@@ -134,6 +135,7 @@ export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetu
             ))}
           </div>
         </div>
+        )}
 
         <div>
           <span className="label">Roslyn&apos;s jerseys</span>
@@ -144,7 +146,7 @@ export function SetupStep({ setup, onChange, onNext, onBack }: { setup: GameSetu
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="label">Opponent</span>
-            <input className="field" value={setup.awayName} placeholder="e.g. Port Washington" aria-invalid={(tried && missing.awayName) || undefined} onChange={(e) => set("awayName", e.target.value)} />
+            <input className="field" readOnly={locked} value={setup.awayName} placeholder="e.g. Port Washington" aria-invalid={(tried && missing.awayName) || undefined} onChange={(e) => set("awayName", e.target.value)} />
             {err("awayName", "Enter the other team.")}
           </label>
           <label className="block">

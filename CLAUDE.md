@@ -2,9 +2,11 @@
 
 Read this whole file before doing anything. It holds every decision made so far for this project. If Noah asks something that is answered here, answer from here. When Noah makes a new decision (new stat, new sport, new rule), update the matching section of this file in the same session.
 
-**Status:** live on Vercel. Everything in sections 5–13 is built: basketball and lacrosse Analyze (upload, trim, setup, multi-pass Gemini analysis, scoreboard readability check, derivations, plus/minus and minutes, review, export, segmenting, appearance notes) and the real **Season trends** tab (spreadsheet parsing, trends, verified Claude summary, XLSX). **Not yet tested against the real APIs:** Gemini (needs the key and a test clip) and Claude (needs `ANTHROPIC_API_KEY`); both are tested against fakes. Start each new phase in plan mode.
+**Status:** live on Vercel. Everything in sections 5–13 is built: basketball and lacrosse Analyze (upload, trim, setup, multi-pass Gemini analysis, scoreboard readability check, derivations, plus/minus and minutes, review, export, segmenting, appearance notes) and the real **Season trends** tab (spreadsheet parsing, trends, verified Claude summary, XLSX). Also built (Nov 11): the **schedule, one-time game claims, admin page, and saved results** (section 21). **Not yet tested against the real APIs:** Gemini (needs the key and a test clip), Claude (needs `ANTHROPIC_API_KEY`, also used to read schedule pictures), and a real private Vercel Blob store for the schedule; all are tested against fakes. Start each new phase in plan mode.
 
 **Reminder for Noah (do this when setting up the real password):** the club password will be the club's Google Classroom password. Set it as `CLUB_PASSWORD` in Vercel, set `ALLOW_TEST_LOGIN=false`, remove the Test button, and redeploy. Never write the password itself into this file or the code.
+
+**Second reminder for Noah (admin):** right now the login page has an **Admin test** button (`ALLOW_ADMIN_TEST=true`). Before real use, set `ADMIN_PASSWORD` in Vercel, set `ALLOW_ADMIN_TEST=false`, add an admin password box (the login API already accepts `mode: "admin-password"`), and redeploy.
 
 ---
 
@@ -28,7 +30,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 
 1. **No made-up data.** If the AI cannot see or read something, it returns `null` / `unknown` and flags it. Omission beats a guess. Never fill a gap with a plausible number.
 2. **AI logs events. Code does all the math.** The AI never adds, averages, or totals. Every total, efficiency, percentage, correlation, and graph value comes from code run on the logged rows.
-3. **No lasting video storage.** Videos go to Gemini (via a temporary Vercel Blob that is deleted within minutes, section 6), get analyzed, and are deleted from Gemini right after. Nothing is stored on Vercel, in a database, or in logs. No database at all in v1.
+3. **No lasting video storage.** Videos go to Gemini (via a temporary Vercel Blob that is deleted within minutes, section 6), get analyzed, and are deleted from Gemini right after. Nothing about the video is stored on Vercel, in a database, or in logs. No database in v1. **Exception (Noah, Nov 11):** the game schedule, who holds a game, and each finished game's tables are kept as small JSON files in a **private** Vercel Blob (section 21): numbers and team names only, never video, appearance notes, or the AI's descriptions.
 4. **No persistent face data.** Appearance notes ("#5, white jersey, headband") live only for one run and are discarded. Never build a face-recognition store or send reference photos. The footage includes high school students (minors).
 5. **No scraping or ripping Hudl.** See section 15.
 6. **API keys are server-only.** Never expose them to the browser. Never commit them. Use `.env.local` and Vercel env vars, and add `.env*` to `.gitignore`.
@@ -43,7 +45,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 - No Supabase and no database in v1. (Noah's other projects use Supabase; this one does not need it because nothing is stored.)
 - **Gemini API** (`@google/genai` SDK) for watching video.
 - **Claude API** (Anthropic SDK) for the Season tab's hypotheses and write-ups. Verify current model names in the docs before hardcoding (as of this writing: `claude-sonnet-5-5` is a reasonable default). Put model names in env vars.
-- Env vars (all server-side): `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIER` (`free` or `paid`), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLUB_PASSWORD`, `ALLOW_TEST_LOGIN`, `SESSION_SECRET`, `BLOB_READ_WRITE_TOKEN` (added by connecting a Vercel Blob store), `ADMIN_BYPASS_CODE`.
+- Env vars (all server-side): `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIER` (`free` or `paid`), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLUB_PASSWORD`, `ALLOW_TEST_LOGIN`, `SESSION_SECRET`, `BLOB_READ_WRITE_TOKEN` (added by connecting a Vercel Blob store), `ADMIN_BYPASS_CODE`, `ADMIN_PASSWORD`, `ALLOW_ADMIN_TEST`.
 - **Built so far (phase 1):** Next 16 + Tailwind 4. Next 16 renamed middleware to `proxy.ts` (runs on Node); it gates every page and API route. Tailwind 4 has no config file, so all design tokens live in `app/globals.css` (one accent: change `--accent-hue`). Session cookie code is in `lib/auth/`. Routes: `/` is Analyze a game, `/season` is Season trends, `/login`. Cache Components is on, so env-driven UI (Test button, free-tier banner) is fixed at build time; the login API still checks `ALLOW_TEST_LOGIN` on every request. Changing env vars on Vercel needs a redeploy.
 - Suggested layout (adjust as needed): `/lib/sports/basketball.ts`, `/lib/sports/lacrosse.ts` (sport configs), `/lib/gemini/` (upload, prompts, schemas, segmenting), `/lib/derive/` (all math), `/lib/sheets/` (layouts, copy/CSV export, Season parsing), `/lib/season/`, `/components/`.
 
@@ -51,6 +53,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 
 The app has two top-level tabs: **Analyze a game** and **Season trends**.
 
+0. **Pick the game (built Nov 11, real flow only).** Sport, then a game from the schedule (section 21). Picking it claims it for that person; nobody else can take it and a finished game can't be redone. Sport and opponent then come from the schedule and are locked in Setup. `/test` skips this step.
 1. **Upload.** The user picks a video file. A local preview plays immediately from the user's own computer (object URL). Nothing waits on the upload.
 2. **Trim.** While the file uploads to Gemini in the background, the user drags a start marker and an end marker to cut off junk before and after the game (people arriving, warmups, people leaving). Optional extras: mark halftime and timeouts to skip them, and mark tip-off to help the scoreboard sync. A typed start/end time fallback is required, because some Hudl exports use codecs the browser cannot preview (H.264 mp4 is fine; HEVC may not play).
 3. **Setup.** Fields, in this order:
@@ -65,7 +68,7 @@ The app has two top-level tabs: **Analyze a game** and **Season trends**.
    **Trim extras (built):** a "Skip halftime and timeouts" section with two buttons: "Break starts here", then "Game resumes here" (from the video playhead), plus typed times as a fallback. The tip-off mark was dropped: the start handle already marks where the game begins.
    **Noah's Nov 8 rules (built):** playback is locked to the trimmed game on both the Trim and Review steps: nothing before the start or after the end can be watched (dragging a handle shows that frame), and on Review skipped breaks are jumped over. A break must sit inside the trimmed game, end after it starts (never negative), last at least 5 seconds, and not overlap another; a marked break start shows as an orange line on the slider, and finished breaks show hatched with orange edges. The detail choice is worded for non-experts: "Standard (recommended): like watching on a phone" vs "High detail: like watching on a big TV".
 4. **Analyze button.** Shows an estimate before starting (time and approximate cost), then stages while running (section 6). Shows "about X min remaining" labeled clearly as an estimate.
-5. **Review.** Editable tables styled like the club's sheets. The possession log shows the first 5 possessions, then a "Show all N possessions" button. Clicking a row jumps the video to that moment. Each row shows a "needs review" flag where confidence is low. The user fixes mistakes here.
+5. **Review.** Editable tables styled like the club's sheets. **"Finish and save game"** (real flow) stores the tables and locks the game for the whole club. The possession log shows the first 5 possessions, then a "Show all N possessions" button. Clicking a row jumps the video to that moment. Each row shows a "needs review" flag where confidence is low. The user fixes mistakes here.
 6. **Export.** "Copy for Google Sheets" button (tab-separated, pastes straight into cells) and CSV/XLSX download, one per sheet layout (section 10). Direct writing into Google Sheets via a service account is a later phase, not v1.
 
 ## 6. Video pipeline
@@ -204,6 +207,8 @@ Be tolerant: merged cells, blank headers, cosmetic big letters, tracker-name cel
 
 **Built (`/season`, shared with `/test`):** `lib/season/parse.ts` reads .xlsx (read-excel-file), CSV and pasted tabs in the browser and detects each sheet type from header words; `lib/season/model.ts` builds per-game numbers and tests every metric × outcome pair (≥10 games, |r| ≥ 0.5; pairs linked by arithmetic, like possessions vs efficiency, are excluded). The club's sheets have no opponent score, so the tab has **optional final-score boxes** that enable win/loss and margin trends. `/api/claude/season` sends only computed numbers (`CLAUDE_MODEL`, default `claude-sonnet-5-5`, refusal fallback on) and `lib/season/verify.ts` removes any sentence with a number not in that data. The app's CSV downloads are named `<Opponent> - <sheet-id>.csv` so they read back in as one game; opponent-view exports are skipped. XLSX download: games, by-situation, and pairs tested.
 
+**Saved games feed this tab (built Nov 11):** a "Use saved games" button loads every finished game from storage as tabs named `<Opponent> <date> - <sheet-id>` (the same naming as the CSV downloads) and runs them through the same parser and math as an uploaded spreadsheet.
+
 ## 14. Privacy, safety, spend
 
 - The footage shows high school students. Keep it private, temporary, and unlogged. Never log video content or appearance notes.
@@ -297,10 +302,23 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 - Delight only at rare moments (for example, a first completed analysis). Keep it small. **Built:** a one-time "First game analyzed" check mark; the stage list fades between stages.
 - Review motion at 2–5× slower speed, frame by frame in the DevTools animation panel, test the trim gestures on a real phone, and look again the next day.
 
+## 21. Games, schedule, claims, admin (Noah, Nov 11; basketball and lacrosse only)
+
+**Goal:** every game analyzed exactly once, and results saved so Season data builds itself.
+
+- **Storage:** private Vercel Blob, two kinds of JSON file: `data/index.json` (schedule plus claim state, tiny) and `data/results/<gameId>.json` (one finished game's tables). Code in `lib/games/` (`logic.ts` pure rules, `store.ts` Blob and in-memory stores, `service.ts` operations). No database. If the Blob store is public-only, saves fail with a message asking for a private store (it is data about minors). `next dev` without a Blob token uses an in-memory store.
+- **Atomic claims without a database:** every change reads the index with its ETag and writes it back with `ifMatch`; if two people claim at once only one write succeeds and the other re-reads and gets "someone else is working on it". Tested with 20 simultaneous claims: one winner.
+- **Claims:** picking a game returns a secret token (stored only as a SHA-256 hash). A claim lasts 20 minutes and the open page renews it every 2 minutes (and when a sleeping laptop wakes), so a closed tab or crash frees the game by itself. Heartbeat, release and save need the token. If a heartbeat fails the page says the game was released. **No tracker names** anywhere (section 10); the picker only says "In progress".
+- **Done:** only when the user presses "Finish and save game" on Review (after fixing mistakes); the server takes sport, opponent and date from the schedule, not the browser. Saved games are locked; only an admin can reopen one (reopen deletes its saved tables).
+- **What is stored:** the club's sheets (header and rows: numbers, blanks, jersey numbers like #23, the opponent's name) and the stat ids. Never video, appearance notes, or AI descriptions. Results over 500 KB are refused.
+- **Admin:** a second signed cookie `admin`, set only by an admin login; `proxy.ts` blocks `/admin` and `/api/admin/*` without it (except `/api/admin/unlock`, the owner unlock, which stays member-level), and `adminGuarded()` in `lib/api.ts` checks again inside each route. Login: **Admin test** button while `ALLOW_ADMIN_TEST=true`, or `ADMIN_PASSWORD` (API ready, input not built yet). An "Admin" link shows in the header only for admins.
+- **Admin page (`/admin`):** pick the sport; add games by picture (choose, drag, or paste; shrunk in the browser to fit Vercel's 4.5 MB body limit), by pasted text, or by hand. Claude (`CLAUDE_MODEL`, `/api/admin/schedule/parse`) only copies rows out and returns null for anything unclear; the admin edits and confirms every row before saving (rule 1). Saving merges by sport + date + opponent, so re-uploading never duplicates or touches claims or results. The list shows status and offers Reopen/Free up and Delete (open games only). Without an Anthropic key, adding by hand still works.
+- **Not built (ideas):** comparing the opponent the Roslyn check reads off the scoreboard with the chosen game; per-person claim names; the admin password input.
+
 ## 20. The /test simulation page
 
 `/test` (behind the login like every page) runs the real Analyze screens against a simulator (`lib/demo/`), plus a simulated **Season trends** tab with charts. Nothing is uploaded, no AI is called, nothing costs money.
 
 - **Made-up data is allowed ONLY on `/test`**, and it is labeled as simulated on the page and above every result. **Never** use simulated or invented data on the real Analyze page or the real Season tab (section 3, rule 1).
-- Each simulated game plants one scoring mistake (the third quarter when it has a score) so the scoreboard check visibly catches it.
+- It skips the game picker and never saves (no made-up games or results on real pages). Each simulated game plants one scoring mistake (the third quarter when it has a score) so the scoreboard check visibly catches it.
 - The simulated season (18 basketball and 12 lacrosse made-up games, `lib/demo/season.ts`) is written as rows in the club's sheet layouts and runs through the **same** Season tab, parser and math as the real one. Its summary is filled in from the computed numbers without calling an AI.
