@@ -72,6 +72,7 @@ export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: R
   const [pasteName, setPasteName] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [over, setOver] = useState(false);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const { read, skipped } = useMemo(() => readTabs(tabs), [tabs]);
@@ -98,6 +99,24 @@ export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: R
     }
     setTabs((t) => [...t, ...added]);
     if (problems.length) setError(problems.join(" "));
+    setBusy(false);
+  }
+
+  /** Games the club already saved from the Analyze tab: same tables, same parser as an uploaded spreadsheet. */
+  async function addSaved() {
+    setError(null);
+    setBusy(true);
+    try {
+      const results = await Promise.all((["basketball", "lacrosse"] as const).map((sp) => api<{ tabs: RawTab[]; games: number }>(`/api/games/results?sport=${sp}`)));
+      const added = results.flatMap((r) => r.tabs);
+      if (added.length === 0) setError("No saved games yet. Finish and save a game from the Analyze tab first.");
+      else {
+        setTabs((t) => [...t, ...added]);
+        setSavedLoaded(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load the saved games.");
+    }
     setBusy(false);
   }
 
@@ -150,9 +169,14 @@ export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: R
                 Load a sample season
               </button>
             ) : (
-              <button type="button" className="btn btn-primary" disabled={busy} onClick={() => input.current?.click()}>
-                {busy ? "Reading…" : "Choose spreadsheets"}
-              </button>
+              <>
+                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void addSaved()}>
+                  {busy ? "Reading…" : "Use saved games"}
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => input.current?.click()}>
+                  Choose spreadsheets
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -163,12 +187,18 @@ export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: R
               {busy ? "Reading…" : "Add more spreadsheets"}
             </button>
           )}
+          {!demo && !savedLoaded && (
+            <button type="button" className="btn btn-secondary text-sm" disabled={busy} onClick={() => void addSaved()}>
+              Add saved games
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-ghost text-sm"
             onClick={() => {
               setTabs([]);
               setScores({});
+              setSavedLoaded(false);
             }}
           >
             Start over

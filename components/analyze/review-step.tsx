@@ -42,8 +42,11 @@ export function ReviewStep({
   playerNotes,
   starters = [],
   demo = false,
+  save,
 }: {
   demo?: boolean;
+  /** Real flow only: saves the sheets to the club's schedule and locks the game. */
+  save?: { saved: boolean; onSave: (sheets: Sheet[]) => Promise<void> };
   playerNotes: { start: string; updates: string[] } | null;
   /** Roslyn starters' numbers, for plus/minus and minutes. */
   starters?: string[];
@@ -121,7 +124,9 @@ export function ReviewStep({
         <p className="hint mt-1">
           Click a row to jump the video there. Rows marked <span className="font-medium text-warning-text">Check</span> are low-confidence or in a quarter that failed the scoreboard check.
         </p>
-        <PossessionEditor log={log} flagged={flagged} away={away} lax={lax} onSeek={onSeek} onChange={updatePossession} />
+        <fieldset disabled={save?.saved} className="min-w-0 border-0 p-0">
+          <PossessionEditor log={log} flagged={flagged} away={away} lax={lax} onSeek={onSeek} onChange={updatePossession} />
+        </fieldset>
       </section>
 
       <section>
@@ -133,6 +138,8 @@ export function ReviewStep({
           ))}
         </div>
       </section>
+
+      {save && <SaveGame sheets={sheets} flagged={flagged.length > 0} saved={save.saved} onSave={save.onSave} />}
 
       <details className="text-sm">
         <summary className="cursor-pointer font-medium text-muted">Run details (raw AI output, tokens)</summary>
@@ -686,5 +693,44 @@ function SheetPreview({ sheet, fileStem }: { sheet: Sheet; fileStem: string }) {
         </table>
       </div>
     </div>
+  );
+}
+
+function SaveGame({ sheets, flagged, saved, onSave }: { sheets: Sheet[]; flagged: boolean; saved: boolean; onSave: (sheets: Sheet[]) => Promise<void> }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const warning = flagged ? "Some quarters still fail the scoreboard check. " : "";
+    if (!window.confirm(`${warning}Save this game? Once saved it is locked, and only an admin can reopen it.`)) return;
+    setPending(true);
+    setError(null);
+    try {
+      await onSave(sheets);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the game. Try again.");
+    }
+    setPending(false);
+  }
+
+  return (
+    <section>
+      <h2 className="text-xl font-semibold tracking-[-0.01em]">Save this game</h2>
+      {saved ? (
+        <p role="status" className="mt-2 font-medium">
+          Saved. This game is locked, so nobody needs to do it again.
+        </p>
+      ) : (
+        <>
+          <p className="hint mt-1 max-w-[38rem]">When the tables look right, save the game. That marks it done for the whole club and keeps the tables for Season trends. The video is never kept.</p>
+          <button type="button" className="btn btn-primary mt-3" disabled={pending} onClick={() => void save()}>
+            {pending ? "Saving…" : "Finish and save game"}
+          </button>
+          <p role="alert" className="mt-2 min-h-5 text-sm text-danger">
+            {error}
+          </p>
+        </>
+      )}
+    </section>
   );
 }

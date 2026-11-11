@@ -3,10 +3,11 @@ export type StepIndex = 0 | 1 | 2 | 3 | 4;
 
 // Wayfinding: where am I in the flow (CLAUDE.md section 19). Past steps are
 // clickable so the user is never trapped.
-export function StepIndicator({ current, reachable, onGo }: { current: StepIndex; reachable: StepIndex; onGo: (s: StepIndex) => void }) {
+export function StepIndicator({ current, reachable, onGo, firstLabel }: { current: StepIndex; reachable: StepIndex; onGo: (s: StepIndex) => void; /** Name for step 1: "Upload" in the simulation, "Game" when a schedule picks the game first. */ firstLabel?: string }) {
   return (
     <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-sm">
-      {STEPS.map((label, i) => {
+      {STEPS.map((stepLabel, i) => {
+        const label = i === 0 && firstLabel ? firstLabel : stepLabel;
         const idx = i as StepIndex;
         const state = idx === current ? "current" : idx <= reachable ? "done" : "todo";
         return (

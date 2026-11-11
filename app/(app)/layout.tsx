@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { AdminLink } from "@/components/admin-link";
 import { LogoutButton } from "@/components/logout-button";
 import { NavTabs } from "@/components/nav-tabs";
 
@@ -10,6 +12,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-2 sm:gap-4 sm:px-6">
           <span className="hidden text-[0.9375rem] font-semibold tracking-[-0.01em] sm:block">Roslyn Film Analyzer</span>
           <NavTabs />
+          <Suspense fallback={null}>
+            <AdminLink />
+          </Suspense>
           <LogoutButton />
         </div>
       </header>

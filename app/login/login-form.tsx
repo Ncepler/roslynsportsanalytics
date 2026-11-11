@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-type Mode = "password" | "test";
+type Mode = "password" | "test" | "admin-test";
 
-export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
+export function LoginForm({ testEnabled, adminTestEnabled }: { testEnabled: boolean; adminTestEnabled: boolean }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
         body: JSON.stringify(mode === "password" ? { mode, password } : { mode }),
       });
       if (res.ok) {
-        router.replace("/");
+        router.replace(mode === "admin-test" || new URLSearchParams(window.location.search).has("admin") ? "/admin" : "/");
         router.refresh();
         return;
       }
@@ -80,6 +80,11 @@ export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
       <button type="submit" className="btn btn-primary mt-3 w-full" disabled={pending !== null}>
         {pending === "password" ? "Logging in…" : "Log in"}
       </button>
+      {adminTestEnabled && (
+        <button type="button" className="btn btn-secondary mt-2 w-full" disabled={pending !== null} onClick={() => void login("admin-test")}>
+          {pending === "admin-test" ? "Logging in…" : "Admin test"}
+        </button>
+      )}
     </form>
   );
 }

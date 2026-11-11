@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
+import { ADMIN_COOKIE, SESSION_COOKIE, verifyAdminToken, verifySessionToken } from "@/lib/auth/session";
 
 // Gate for every page and every API route (CLAUDE.md section 3, rule 7).
 // Public: /login and /api/auth/*. Next's build assets are excluded by the matcher.
@@ -14,7 +14,16 @@ export async function proxy(request: NextRequest) {
   const authed = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (pathname === "/login") {
-    return authed ? NextResponse.redirect(new URL("/", request.url)) : NextResponse.next();
+    // A member who needs the admin login is sent here with ?admin, so don't bounce them back.
+    const wantsAdmin = request.nextUrl.searchParams.has("admin");
+    return authed && !wantsAdmin ? NextResponse.redirect(new URL("/", request.url)) : NextResponse.next();
+  }
+
+  // Admin-only: the /admin page and /api/admin/* (the owner-unlock route stays member-level).
+  const adminOnly = pathname === "/admin" || pathname.startsWith("/admin/") || (pathname.startsWith("/api/admin/") && pathname !== "/api/admin/unlock");
+  if (adminOnly && !(authed && (await verifyAdminToken(request.cookies.get(ADMIN_COOKIE)?.value)))) {
+    if (isApi) return NextResponse.json({ error: authed ? "Admins only." : "Not signed in." }, { status: authed ? 403 : 401 });
+    return NextResponse.redirect(new URL("/login?admin=1", request.url));
   }
 
   if (authed) return NextResponse.next();

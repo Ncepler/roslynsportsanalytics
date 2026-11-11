@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type GeminiFile } from "@/lib/client/api";
+import { finishGame, releaseGame, sendHeartbeat } from "@/lib/client/games";
+import { HEARTBEAT_MS, type GameSport, type PublicGame } from "@/lib/games/types";
+import type { Sheet } from "@/lib/sheets";
 import { realBackend, type Backend } from "@/lib/client/backend";
 import type { Resolution } from "@/lib/client/run";
 import { keptRanges, planSegments, totalSeconds } from "@/lib/client/segments";
@@ -10,6 +13,7 @@ import type { GameSetup } from "@/lib/gemini/prompt";
 import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/gemini/pricing";
 import { passesNeeded } from "@/lib/gemini/prompt";
 import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
+import { GameStep } from "./game-step";
 import { ReviewStep } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
@@ -42,6 +46,9 @@ const basketballDefaults = (): GameSetup => ({
   statIds: defaultStatIds(SPORTS.basketball),
 });
 
+/** The game this person picked and holds. `token` is their secret for keeping, releasing and saving it. */
+type ChosenGame = { id: string; sport: GameSport; opponent: string; date: string | null; token: string };
+
 export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () => Backend; demo?: boolean }) {
   const [step, setStep] = useState<StepIndex>(0);
   const [reachable, setReachable] = useState<StepIndex>(0);
@@ -73,6 +80,82 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const adminToken = useRef<string | null>(null);
   const [unlockedFlash, setUnlockedFlash] = useState(false);
   const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
+
+  // ---------- the chosen game (real flow only; /test has no schedule) ----------
+  const [game, setGame] = useState<ChosenGame | null>(null);
+  const [claimLost, setClaimLost] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const gameRef = useRef<{ game: ChosenGame | null; saved: boolean }>({ game: null, saved: false });
+  useEffect(() => {
+    gameRef.current = { game, saved };
+  }, [game, saved]);
+
+  function chooseGame(g: PublicGame, token: string) {
+    setGame({ id: g.id, sport: g.sport as GameSport, opponent: g.opponent, date: g.date, token });
+    setClaimLost(null);
+    setSaved(false);
+    // The sport and opponent come from the schedule, not from typing.
+    setSetup((cur) => ({ ...cur, sportId: g.sport, awayName: g.opponent, statIds: cur.sportId === g.sport ? cur.statIds : defaultStatIds(SPORTS[g.sport]) }));
+  }
+
+  // Keep the claim alive while this page is open, and re-check when a sleeping laptop wakes.
+  useEffect(() => {
+    if (!game || saved) return;
+    const { id, token } = game;
+    let stopped = false;
+    const beat = () =>
+      sendHeartbeat(id, token).catch((err) => {
+        if (err instanceof ApiError && err.status === 409 && !stopped) setClaimLost(err.message);
+      });
+    const timer = setInterval(beat, HEARTBEAT_MS);
+    const onVisible = () => document.visibilityState === "visible" && beat();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [game, saved]);
+
+  // Free the game if the tab closes before it is saved.
+  useEffect(() => {
+    const onHide = () => {
+      const cur = gameRef.current;
+      if (cur.game && !cur.saved) void releaseGame(cur.game.id, cur.game.token);
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
+
+  /** Gives the game back and starts over at the picker. */
+  function changeGame() {
+    runAbort.current?.abort();
+    uploadAbort.current?.abort();
+    if (game && !saved) void releaseGame(game.id, game.token);
+    if (geminiName.current) void backend.deleteFile(geminiName.current);
+    geminiName.current = null;
+    clearance.current = null;
+    setGame(null);
+    setClaimLost(null);
+    setSaved(false);
+    setFile(null);
+    setVideoUrl(null);
+    setDuration(null);
+    setUpload(null);
+    setLog(null);
+    setNotes(null);
+    setRun({ phase: "idle" });
+    setTrim({ range: { start: 0, end: 0 }, skips: [] });
+    setSetup(basketballDefaults());
+    setReachable(0);
+    setStep(0);
+  }
+
+  async function saveGame(sheets: Sheet[]) {
+    if (!game) return;
+    await finishGame(game.id, game.token, { statIds: setup.statIds, sheets: sheets.map(({ id, title, header, rows }) => ({ id, title, header, rows })) });
+    setSaved(true);
+  }
 
   // Hidden owner unlock: on the upload screen, typing the 10-digit code (checked
   // by the server against ADMIN_BYPASS_CODE) shows a check mark for a second.
@@ -243,6 +326,10 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
   // ---------- run ----------
   async function analyze() {
+    if (claimLost) {
+      setRun({ phase: "error", message: claimLost });
+      return;
+    }
     runAbort.current?.abort();
     const ctrl = new AbortController();
     runAbort.current = ctrl;
@@ -341,7 +428,28 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
           ✅
         </div>
       )}
-      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} />
+      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} firstLabel={demo ? "Upload" : "Game"} />
+
+      {game && (
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="font-medium">
+            {game.sport === "lacrosse" ? "Lacrosse" : "Basketball"} vs. {game.opponent}
+          </span>
+          {!saved && (
+            <button type="button" className="btn btn-ghost min-h-9 px-2 text-sm" onClick={changeGame}>
+              Choose a different game
+            </button>
+          )}
+        </div>
+      )}
+      {claimLost && !saved && (
+        <div role="alert" className="mt-4 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+          {claimLost}{" "}
+          <button type="button" className="underline" onClick={changeGame}>
+            Pick a game
+          </button>
+        </div>
+      )}
 
       {file && step !== 0 && <UploadStatus upload={upload} fileName={file.name} onRetry={() => file && void startUpload(file)} />}
 
@@ -379,7 +487,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       )}
 
       <div className={step === 1 ? "mt-4" : "mt-8"}>
-        {step === 0 && <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} />}
+        {step === 0 && (demo || game ? <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} /> : <GameStep onChosen={chooseGame} />)}
         {step === 1 && (
           <>
             <TrimStep
@@ -401,7 +509,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
             )}
           </>
         )}
-        {step === 2 && <SetupStep setup={setup} onChange={changeSetup} onBack={() => go(1)} onNext={() => go(3)} />}
+        {step === 2 && <SetupStep setup={setup} onChange={changeSetup} onBack={() => go(1)} onNext={() => go(3)} locked={Boolean(game)} />}
         {step === 3 && (
           <RunStep
             keptSeconds={keptSeconds}
@@ -435,7 +543,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game ? { saved, onSave: saveGame } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>

@@ -123,3 +123,15 @@ export async function verifyToken(token: unknown): Promise<Record<string, unknow
     return null;
   }
 }
+
+// ---------- admin cookie (a second signed cookie, set only by an admin login) ----------
+
+export const ADMIN_COOKIE = "admin";
+
+export async function createAdminToken(): Promise<string> {
+  return signToken({ t: "admin" }, SESSION_TTL_SECONDS);
+}
+
+export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
+  return (await verifyToken(token))?.t === "admin";
+}
