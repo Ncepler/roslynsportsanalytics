@@ -43,10 +43,9 @@ export type GeminiFile = { name: string; uri: string; mimeType: string; state: s
  */
 export async function uploadToGemini(file: File, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<GeminiFile> {
   const mimeType = normalizeVideoType(file);
-  let blob: { url: string };
-  try {
-    blob = await upload(`game-${Date.now()}`, file, {
-      access: "public",
+  const put = (access: "public" | "private") =>
+    upload(`game-${Date.now()}`, file, {
+      access,
       handleUploadUrl: "/api/blob/upload",
       contentType: mimeType,
       multipart: true,
@@ -54,11 +53,22 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
       // Leave the last stretch for the hand-off to Gemini.
       onUploadProgress: (e) => onProgress((e.percentage / 100) * 0.9),
     });
+  let blob: { url: string };
+  let access: "public" | "private" = "public";
+  try {
+    try {
+      blob = await put("public");
+    } catch (err) {
+      // A Blob store created as "private" refuses public uploads: use private.
+      if (signal.aborted || !(err instanceof Error) || !/private|access/i.test(err.message)) throw err;
+      access = "private";
+      blob = await put("private");
+    }
   } catch (err) {
     if (signal.aborted) throw new ApiError("Upload cancelled.", 0);
     throw new ApiError(err instanceof Error && err.message ? err.message : "The upload failed. Try again.", 0);
   }
-  const parsed = await api<{ file?: { name?: string; uri?: string; mimeType?: string; state?: string } }>("/api/gemini/import", { body: { blobUrl: blob.url, mimeType } });
+  const parsed = await api<{ file?: { name?: string; uri?: string; mimeType?: string; state?: string } }>("/api/gemini/import", { body: { blobUrl: blob.url, mimeType, access } });
   onProgress(1);
   if (!parsed.file?.name || !parsed.file.uri) throw new ApiError("Gemini didn't confirm the upload.", 0);
   return {
