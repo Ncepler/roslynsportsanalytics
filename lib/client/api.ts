@@ -1,6 +1,6 @@
 // Browser-side helpers for the app's own API routes.
 
-import { upload } from "@vercel/blob/client";
+import { upload, uploadPresigned } from "@vercel/blob/client";
 
 export class ApiError extends Error {
   constructor(
@@ -43,8 +43,11 @@ export type GeminiFile = { name: string; uri: string; mimeType: string; state: s
  */
 export async function uploadToGemini(file: File, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<GeminiFile> {
   const mimeType = normalizeVideoType(file);
+  // Older Blob stores hand out client tokens; newer ones hand out signed URLs. The server says which.
+  const { mode } = await api<{ mode: "token" | "presigned" | "none" }>("/api/blob/upload").catch(() => ({ mode: "token" as const }));
+  const send = mode === "presigned" ? uploadPresigned : upload;
   const put = (access: "public" | "private") =>
-    upload(`game-${Date.now()}`, file, {
+    send(`game-${Date.now()}`, file, {
       access,
       handleUploadUrl: "/api/blob/upload",
       contentType: mimeType,

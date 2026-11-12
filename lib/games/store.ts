@@ -3,6 +3,7 @@
 // people claim at once, only one write goes through and the other re-reads.
 
 import { BlobError, BlobPreconditionFailedError, del, get, put } from "@vercel/blob";
+import { blobMode } from "@/lib/blob-config";
 import { GameError } from "./errors";
 import { emptyIndex } from "./logic";
 import type { Index, StoredResult } from "./types";
@@ -109,7 +110,7 @@ export function createMemoryStore(): Store {
 const g = globalThis as unknown as { __gamesMemoryStore?: Store };
 
 export function getStore(): Store {
-  if (process.env.BLOB_READ_WRITE_TOKEN) return blobStore;
+  if (blobMode() !== "none") return blobStore;
   if (process.env.NODE_ENV !== "production") return (g.__gamesMemoryStore ??= createMemoryStore());
   throw new GameError(503, "Game storage isn't set up yet (no Blob store connected).");
 }
