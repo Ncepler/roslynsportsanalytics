@@ -45,6 +45,7 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
   const mimeType = normalizeVideoType(file);
   // Older Blob stores hand out client tokens; newer ones hand out signed URLs. The server says which.
   const { mode } = await api<{ mode: "token" | "presigned" | "none" }>("/api/blob/upload").catch(() => ({ mode: "token" as const }));
+  if (mode === "none") throw new ApiError("Video upload isn't set up yet: no Blob store is connected to this project. Connect one in Vercel (Storage) and redeploy.", 0);
   const send = mode === "presigned" ? uploadPresigned : upload;
   const put = (access: "public" | "private") =>
     send(`game-${Date.now()}`, file, {
@@ -69,7 +70,10 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
     }
   } catch (err) {
     if (signal.aborted) throw new ApiError("Upload cancelled.", 0);
-    throw new ApiError(err instanceof Error && err.message ? err.message : "The upload failed. Try again.", 0);
+    const raw = err instanceof Error ? err.message : "";
+    // The SDK's own wording for "the server wouldn't give me upload permission" means a Blob setup problem, not a bad file.
+    if (/client token|presigned|webhook public key/i.test(raw)) throw new ApiError("The server couldn't start the upload. Check that the Blob store is connected to this project (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN, and BLOB_WEBHOOK_PUBLIC_KEY for newer stores), then redeploy.", 0);
+    throw new ApiError(raw || "The upload failed. Try again.", 0);
   }
   const parsed = await api<{ file?: { name?: string; uri?: string; mimeType?: string; state?: string } }>("/api/gemini/import", { body: { blobUrl: blob.url, mimeType, access } });
   onProgress(1);
