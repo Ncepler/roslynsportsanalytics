@@ -67,7 +67,7 @@ export async function releaseGame(id: string, token: string, store: Store = getS
  * from the schedule, not the browser. The result is written first, so a failure
  * in between never loses data.
  */
-export async function finishGame(id: string, token: string, data: { statIds: string[]; sheets: StoredSheet[] }, store: Store = getStore()) {
+export async function finishGame(id: string, token: string, data: { statIds: string[]; sheets: StoredSheet[]; /** The sport the Roslyn-check pass was issued for; must match the game. */ expectSport?: GameSport }, store: Store = getStore()) {
   const hash = await hashToken(token);
   if (JSON.stringify(data).length > MAX_RESULT_BYTES) throw new GameError(413, "These results are too big to save.");
   // Check the claim before writing anything.
@@ -75,6 +75,7 @@ export async function finishGame(id: string, token: string, data: { statIds: str
   const check = applyFinish(index, id, hash, Date.now());
   const game = index.games.find((g) => g.id === id);
   if (!check.ok || !game) throw new GameError(check.ok ? 404 : check.status, check.ok ? "That game isn't on the schedule." : check.error);
+  if (data.expectSport && data.expectSport !== game.sport) throw new GameError(403, "This video was checked as a different sport than the game you picked.");
   await store.writeResult(id, { gameId: id, sport: game.sport, opponent: game.opponent, date: game.date, statIds: data.statIds, sheets: data.sheets, savedAt: Date.now() });
   try {
     await mutate(store, (idx, now) => ({ outcome: applyFinish(idx, id, hash, now), value: null }));

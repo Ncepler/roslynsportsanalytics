@@ -128,10 +128,21 @@ export async function verifyToken(token: unknown): Promise<Record<string, unknow
 
 export const ADMIN_COOKIE = "admin";
 
+// Two different roles, two different token types, so one can never pass as the other:
+//  - "schedule-admin": the cookie the club presidents (and Noah) get from the admin login. Schedule only.
+//  - "owner": what the owner-unlock code returns (app/api/admin/unlock). Only Noah has the code.
 export async function createAdminToken(): Promise<string> {
-  return signToken({ t: "admin" }, SESSION_TTL_SECONDS);
+  return signToken({ t: "schedule-admin" }, SESSION_TTL_SECONDS);
 }
 
 export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
-  return (await verifyToken(token))?.t === "admin";
+  return (await verifyToken(token))?.t === "schedule-admin";
+}
+
+export async function createOwnerToken(): Promise<string> {
+  return signToken({ t: "owner" }, 6 * 60 * 60);
+}
+
+export async function verifyOwnerToken(token: unknown): Promise<boolean> {
+  return (await verifyToken(token))?.t === "owner";
 }

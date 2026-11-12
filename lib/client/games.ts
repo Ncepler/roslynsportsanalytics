@@ -12,4 +12,4 @@ export const sendHeartbeat = (id: string, token: string) => api(`/api/games/${id
 /** Best effort and safe to call as the page closes. */
 export const releaseGame = (id: string, token: string) => api(`/api/games/${id}/release`, { body: { token }, keepalive: true }).catch(() => undefined);
 
-export const finishGame = (id: string, token: string, data: { statIds: string[]; sheets: unknown[] }) => api(`/api/games/${id}/finish`, { body: { token, ...data } });
+export const finishGame = (id: string, token: string, data: { statIds: string[]; sheets: unknown[]; clearance: string }) => api(`/api/games/${id}/finish`, { body: { token, ...data } });

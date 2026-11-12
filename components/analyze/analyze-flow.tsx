@@ -49,7 +49,8 @@ const basketballDefaults = (): GameSetup => ({
 /** The game this person picked and holds. `token` is their secret for keeping, releasing and saving it. */
 type ChosenGame = { id: string; sport: GameSport; opponent: string; date: string | null; token: string };
 
-export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () => Backend; demo?: boolean }) {
+export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBackend?: () => Backend; demo?: boolean; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
+  const testMode = Boolean(ownerToken);
   const [step, setStep] = useState<StepIndex>(0);
   const [reachable, setReachable] = useState<StepIndex>(0);
   const [file, setFile] = useState<File | null>(null);
@@ -76,9 +77,8 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
   const uploadError = useRef<string | null>(null);
   /** Signed pass from the Roslyn-game check; every analysis request carries it. */
   const clearance = useRef<string | null>(null);
-  /** Owner-only unlock (typed on the upload screen, no UI). Lives in this tab only. */
-  const adminToken = useRef<string | null>(null);
-  const [unlockedFlash, setUnlockedFlash] = useState(false);
+  /** The pass the real Roslyn-game check issued, kept so a finished game can be saved (the server refuses bypassed passes). */
+  const savedClearance = useRef<string | null>(null);
   const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
 
   // ---------- the chosen game (real flow only; /test has no schedule) ----------
@@ -135,6 +135,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
     if (geminiName.current) void backend.deleteFile(geminiName.current);
     geminiName.current = null;
     clearance.current = null;
+    savedClearance.current = null;
     setGame(null);
     setClaimLost(null);
     setSaved(false);
@@ -153,34 +154,10 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
   async function saveGame(sheets: Sheet[]) {
     if (!game) return;
-    await finishGame(game.id, game.token, { statIds: setup.statIds, sheets: sheets.map(({ id, title, header, rows }) => ({ id, title, header, rows })) });
+    if (!savedClearance.current) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
+    await finishGame(game.id, game.token, { clearance: savedClearance.current, statIds: setup.statIds, sheets: sheets.map(({ id, title, header, rows }) => ({ id, title, header, rows })) });
     setSaved(true);
   }
-
-  // Hidden owner unlock: on the upload screen, typing the 10-digit code (checked
-  // by the server against ADMIN_BYPASS_CODE) shows a check mark for a second.
-  useEffect(() => {
-    if (step !== 0 || demo) return;
-    let typed = "";
-    let lastTried = "";
-    function onKey(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey || e.altKey || !/^\d$/.test(e.key)) return;
-      typed = (typed + e.key).slice(-10);
-      if (typed.length < 10 || typed === lastTried) return;
-      lastTried = typed;
-      fetch("/api/admin/unlock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: typed }) })
-        .then((r) => r.json())
-        .then((r: { ok?: boolean; token?: string }) => {
-          if (!r.ok || !r.token) return;
-          adminToken.current = r.token;
-          setUnlockedFlash(true);
-          setTimeout(() => setUnlockedFlash(false), 1000);
-        })
-        .catch(() => {});
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [step, demo]);
 
   const go = useCallback((s: StepIndex) => {
     setStep(s);
@@ -344,13 +321,14 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       // The Roslyn-game check runs first and gates everything else (owner unlock aside, no bypass).
       setRun({ phase: "gate" });
       const whole = { start: ranges[0].start, end: ranges[ranges.length - 1].end };
-      const gate = await backend.gate(gfile, whole, setup.sportId, ctrl.signal, adminToken.current ?? undefined);
+      const gate = await backend.gate(gfile, whole, setup.sportId, ctrl.signal, ownerToken);
       if (!gate.pass) {
         await cleanupGemini();
         setRun({ phase: "rejected", reason: gate.reason });
         return;
       }
       clearance.current = gate.clearance;
+      savedClearance.current = gate.bypass ? null : gate.clearance;
       const video = { file: gfile, resolution, clearance: gate.clearance };
       const runSetup: GameSetup = { ...setup };
 
@@ -423,12 +401,12 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
 
   return (
     <div>
-      {unlockedFlash && (
-        <div aria-hidden className="pointer-events-none fixed right-4 top-16 z-50 text-2xl">
-          ✅
-        </div>
+      {testMode && (
+        <p role="status" className="mb-5 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+          Owner test. This runs on real Gemini with any video, but nothing is saved and it doesn&apos;t count toward any game or season.
+        </p>
       )}
-      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} firstLabel={demo ? "Upload" : "Game"} />
+      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} firstLabel={demo || testMode ? "Upload" : "Game"} />
 
       {game && (
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -487,7 +465,7 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
       )}
 
       <div className={step === 1 ? "mt-4" : "mt-8"}>
-        {step === 0 && (demo || game ? <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} /> : <GameStep onChosen={chooseGame} />)}
+        {step === 0 && (demo || testMode || game ? <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} /> : <GameStep onChosen={chooseGame} />)}
         {step === 1 && (
           <>
             <TrimStep
@@ -538,6 +516,11 @@ export function AnalyzeFlow({ makeBackend, demo = false }: { makeBackend?: () =>
         )}
         {step === 4 && log && (
           <>
+            {testMode && (
+              <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+                Test results. Nothing here is saved or counted toward any game or season.
+              </p>
+            )}
             {demo && (
               <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OwnerTest } from "@/components/admin/owner-test";
 import { ScheduleAdmin } from "@/components/admin/schedule-admin";
 
 export const metadata: Metadata = { title: "Admin · Roslyn Film Analyzer" };
@@ -12,6 +13,7 @@ export default function AdminPage() {
       <div className="mt-8">
         <ScheduleAdmin />
       </div>
+      <OwnerTest />
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Log in · Roslyn Film Analyzer" };
@@ -14,7 +15,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Roslyn Film Analyzer</h1>
         <p className="mt-2 text-muted">Sports analytics club. Enter the club password to continue.</p>
-        <LoginForm testEnabled={testEnabled} adminTestEnabled={adminTestEnabled} />
+        <Suspense fallback={null}>
+          <LoginForm testEnabled={testEnabled} adminTestEnabled={adminTestEnabled} />
+        </Suspense>
       </div>
     </main>
   );

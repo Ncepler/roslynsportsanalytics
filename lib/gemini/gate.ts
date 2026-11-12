@@ -74,7 +74,7 @@ export function decideGate(sport: SportConfig, raw: unknown): GateDecision {
   return { pass: true, evidence };
 }
 
-export type Clearance = { t: "clear"; uri: string; sport: string; start: number; end: number };
+export type Clearance = { t: "clear"; uri: string; sport: string; start: number; end: number; bypass?: boolean };
 
 /** A request's range must sit inside the range the pass was issued for. */
 export function withinClearance(c: Clearance, uri: string, sport: string, start: number, end: number) {

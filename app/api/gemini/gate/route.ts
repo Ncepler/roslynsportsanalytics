@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
-import { signToken, verifyToken } from "@/lib/auth/session";
+import { signToken, verifyOwnerToken } from "@/lib/auth/session";
 import { startClipsInteraction } from "@/lib/gemini/client";
 import { CLEARANCE_TTL_SECONDS, gateClips, gatePrompt, gateSchema } from "@/lib/gemini/gate";
 import { parseVideoRange } from "@/lib/gemini/validate";
@@ -21,10 +21,11 @@ export async function POST(request: Request) {
     const sport = typeof body?.sportId === "string" ? getSport(body.sportId) : undefined;
     if (!sport) return jsonError(400, "Unknown sport.");
 
-    // Owner unlock (app/api/admin/unlock): skips the AI look, signs the same pass.
-    const admin = typeof body?.adminToken === "string" ? await verifyToken(body.adminToken) : null;
-    if (admin?.t === "admin") {
-      const clearance = await signToken({ t: "clear", uri: range.uri, sport: sport.id, start: range.start, end: range.end }, CLEARANCE_TTL_SECONDS);
+    // Owner unlock (app/api/admin/unlock): skips the AI look. The pass is marked
+    // `bypass`, and saving a game refuses bypassed passes, so a bypassed run can
+    // never become a real game or season data.
+    if (typeof body?.adminToken === "string" && (await verifyOwnerToken(body.adminToken))) {
+      const clearance = await signToken({ t: "clear", bypass: true, uri: range.uri, sport: sport.id, start: range.start, end: range.end }, CLEARANCE_TTL_SECONDS);
       return NextResponse.json({ bypass: true, clearance });
     }
 
