@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { SESSION_COOKIE, canUseSite, isAdminRole, verifySessionToken } from "@/lib/auth/session";
+import { DbError } from "@/lib/db/errors";
 import { GameError } from "@/lib/games/errors";
 import { GeminiConfigError } from "@/lib/gemini/client";
 
@@ -41,6 +42,7 @@ async function guardedInner(request: Request, handler: () => Promise<Response>):
   try {
     return await handler();
   } catch (err) {
+    if (err instanceof DbError) return jsonError(err.status, err.message);
     if (err instanceof GameError) return jsonError(err.status, err.message);
     if (err instanceof GeminiConfigError) return jsonError(503, "Gemini isn't set up yet (missing API key).");
     const status = (err as { status?: number }).status;
