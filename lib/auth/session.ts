@@ -14,7 +14,20 @@ export const sessionCookieOptions = {
   maxAge: SESSION_TTL_SECONDS,
 } as const;
 
-type SessionPayload = { exp: number };
+// Roles (CLAUDE.md, Nov 13): demo sees only the /test simulation; member uses the real site;
+// admin is a member plus /admin. The role is inside the signed cookie, so it can't be edited in the browser.
+export const ROLES = ["demo", "member", "admin"] as const;
+export type Role = (typeof ROLES)[number];
+
+export function isRole(value: unknown): value is Role {
+  return typeof value === "string" && (ROLES as readonly string[]).includes(value);
+}
+
+/** Can this role use the real site (database, Gemini, Claude)? Demo cannot. */
+export const canUseSite = (role: Role | null): boolean => role === "member" || role === "admin";
+export const isAdminRole = (role: Role | null): boolean => role === "admin";
+
+type SessionPayload = { exp: number; role: Role };
 
 const encoder = new TextEncoder();
 
@@ -54,32 +67,34 @@ function getKey(): Promise<CryptoKey> {
   return keyPromise;
 }
 
-export async function createSessionToken(): Promise<string> {
-  const payload: SessionPayload = { exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS };
+export async function createSessionToken(role: Role): Promise<string> {
+  const payload: SessionPayload = { exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS, role };
   const body = toBase64Url(encoder.encode(JSON.stringify(payload)));
   const signature = await crypto.subtle.sign("HMAC", await getKey(), encoder.encode(body));
   return `${body}.${toBase64Url(new Uint8Array(signature))}`;
 }
 
-export async function verifySessionToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+/** The role in a valid, unexpired session cookie; null otherwise (including old cookies with no role). */
+export async function verifySessionToken(token: string | undefined): Promise<Role | null> {
+  if (!token) return null;
   const [body, signature, extra] = token.split(".");
-  if (!body || !signature || extra !== undefined) return false;
+  if (!body || !signature || extra !== undefined) return null;
 
   const signatureBytes = fromBase64Url(signature);
-  if (!signatureBytes) return false;
+  if (!signatureBytes) return null;
 
   // crypto.subtle.verify compares the signature in constant time.
   const valid = await crypto.subtle.verify("HMAC", await getKey(), signatureBytes, encoder.encode(body));
-  if (!valid) return false;
+  if (!valid) return null;
 
   const payloadBytes = fromBase64Url(body);
-  if (!payloadBytes) return false;
+  if (!payloadBytes) return null;
   try {
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as Partial<SessionPayload>;
-    return typeof payload.exp === "number" && payload.exp > Date.now() / 1000;
+    if (typeof payload.exp !== "number" || payload.exp <= Date.now() / 1000) return null;
+    return isRole(payload.role) ? payload.role : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -124,21 +139,9 @@ export async function verifyToken(token: unknown): Promise<Record<string, unknow
   }
 }
 
-// ---------- admin cookie (a second signed cookie, set only by an admin login) ----------
+// ---------- owner token (what the owner-unlock code returns; only Noah has the code) ----------
 
-export const ADMIN_COOKIE = "admin";
-
-// Two different roles, two different token types, so one can never pass as the other:
-//  - "schedule-admin": the cookie the club presidents (and Noah) get from the admin login. Schedule only.
-//  - "owner": what the owner-unlock code returns (app/api/admin/unlock). Only Noah has the code.
-export async function createAdminToken(): Promise<string> {
-  return signToken({ t: "schedule-admin" }, SESSION_TTL_SECONDS);
-}
-
-export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
-  return (await verifyToken(token))?.t === "schedule-admin";
-}
-
+// Separate token type from the session cookie, so one can never pass as the other.
 export async function createOwnerToken(): Promise<string> {
   return signToken({ t: "owner" }, 6 * 60 * 60);
 }

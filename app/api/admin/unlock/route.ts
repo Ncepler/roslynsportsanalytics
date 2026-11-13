@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonError, readJson } from "@/lib/api";
+import { adminGuarded, jsonError, readJson } from "@/lib/api";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { createOwnerToken, safeEqual } from "@/lib/auth/session";
 
@@ -9,6 +9,10 @@ import { createOwnerToken, safeEqual } from "@/lib/auth/session";
 // env var, never in the code or the browser bundle. With the var unset the
 // feature does not exist. A wrong code gets the same plain "no" as always.
 export async function POST(request: Request) {
+  return adminGuarded(request, () => unlock(request));
+}
+
+async function unlock(request: Request): Promise<Response> {
   if (!allowAttempt(`admin:${clientIp(request)}`, 10)) return jsonError(429, "Too many tries.");
   const expected = process.env.ADMIN_BYPASS_CODE;
   const body = await readJson<{ code?: unknown }>(request);

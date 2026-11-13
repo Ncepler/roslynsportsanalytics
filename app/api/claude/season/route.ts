@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { jsonError } from "@/lib/api";
+import { jsonError, refuseUnlessMember } from "@/lib/api";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { SUMMARY_SCHEMA, summaryPrompt, type SummaryInput, type SummaryOutput } from "@/lib/season/summary";
 import { allowedNumbers, verifyList, verifyText } from "@/lib/season/verify";
@@ -26,6 +26,8 @@ function validInput(v: unknown): v is SummaryInput {
 // reply is checked here: any sentence or hypothesis with a number that isn't
 // in the input is removed before it reaches the browser.
 export async function POST(request: Request) {
+  const refused = await refuseUnlessMember(request);
+  if (refused) return refused;
   if (!allowAttempt(`claude:${clientIp(request)}`, 10)) return jsonError(429, "Too many requests. Wait a minute and try again.");
   if (!process.env.ANTHROPIC_API_KEY) return jsonError(503, "The AI summary isn't set up yet (no Anthropic API key).");
 

@@ -2,12 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-type Mode = "password" | "test" | "admin-test";
+type Mode = "password" | "test";
 
 // If the server hasn't answered or the next page hasn't loaded after this long, say so instead of spinning forever.
 const STUCK_MS = 10_000;
 
-export function LoginForm({ testEnabled, adminTestEnabled }: { testEnabled: boolean; adminTestEnabled: boolean }) {
+export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Mode | null>(null);
@@ -26,15 +26,18 @@ export function LoginForm({ testEnabled, adminTestEnabled }: { testEnabled: bool
     setPending(mode);
     setError(null);
     try {
+      // Where the user was headed before login. The server checks it again (same-site paths only).
+      const next = new URLSearchParams(window.location.search).get("next");
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "password" ? { mode, password } : { mode }),
+        body: JSON.stringify(mode === "password" ? { mode, password, next } : { mode, next }),
       });
       if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { redirect?: string } | null;
         // A full page load, not router.replace + refresh: those two navigations
         // can race and leave this form stuck on "Logging in…".
-        window.location.assign(mode === "admin-test" ? "/admin" : "/");
+        window.location.assign(data?.redirect ?? "/");
         return;
       }
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -48,7 +51,7 @@ export function LoginForm({ testEnabled, adminTestEnabled }: { testEnabled: bool
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!password) {
-      setError("Enter the club password.");
+      setError("Enter the club or admin password.");
       return;
     }
     void login("password");
@@ -83,11 +86,6 @@ export function LoginForm({ testEnabled, adminTestEnabled }: { testEnabled: bool
             onClick={() => void login("test")}
           >
             {pending === "test" ? "Logging in…" : "Test"}
-          </button>
-        )}
-        {adminTestEnabled && (
-          <button type="button" className="btn btn-secondary" disabled={pending !== null} onClick={() => void login("admin-test")}>
-            {pending === "admin-test" ? "Logging in…" : "Admin test"}
           </button>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
-import { verifyAdminToken } from "@/lib/auth/session";
+import { SESSION_COOKIE, canUseSite, isAdminRole, verifySessionToken } from "@/lib/auth/session";
 import { GameError } from "@/lib/games/errors";
 import { GeminiConfigError } from "@/lib/gemini/client";
 
@@ -14,7 +14,27 @@ export function jsonError(status: number, error: string) {
   return NextResponse.json({ error }, { status });
 }
 
+async function roleOf(request: Request) {
+  const raw = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`).exec(request.headers.get("cookie") ?? "")?.[1];
+  return verifySessionToken(raw);
+}
+
+/** Second lock for routes that do not use guarded(): a Response to return if the caller is not a member/admin, else null. */
+export async function refuseUnlessMember(request: Request): Promise<Response | null> {
+  const role = await roleOf(request);
+  if (!role) return jsonError(401, "Not signed in.");
+  return canUseSite(role) ? null : jsonError(403, "The demo can't use this. Log in with the club password.");
+}
+
+/** Rate limit, JSON errors, and a second role check (members and admins only; the demo role is refused). */
 export async function guarded(request: Request, handler: () => Promise<Response>): Promise<Response> {
+  const role = await roleOf(request);
+  if (!role) return jsonError(401, "Not signed in.");
+  if (!canUseSite(role)) return jsonError(403, "The demo can't use this. Log in with the club password.");
+  return guardedInner(request, handler);
+}
+
+async function guardedInner(request: Request, handler: () => Promise<Response>): Promise<Response> {
   if (!allowAttempt(`api:${clientIp(request)}`, API_LIMIT_PER_MINUTE)) {
     return jsonError(429, "Too many requests. Wait a minute and try again.");
   }
@@ -33,11 +53,12 @@ export async function guarded(request: Request, handler: () => Promise<Response>
   }
 }
 
-/** Like guarded(), and also requires the admin cookie (proxy.ts checks too; this is the second lock). */
+/** Like guarded(), but admins only (proxy.ts checks too; this is the second lock). */
 export async function adminGuarded(request: Request, handler: () => Promise<Response>): Promise<Response> {
-  const adminCookie = /(?:^|;\s*)admin=([^;]+)/.exec(request.headers.get("cookie") ?? "")?.[1];
-  if (!(await verifyAdminToken(adminCookie))) return jsonError(403, "Admins only.");
-  return guarded(request, handler);
+  const role = await roleOf(request);
+  if (!role) return jsonError(401, "Not signed in.");
+  if (!isAdminRole(role)) return jsonError(403, "Admins only.");
+  return guardedInner(request, handler);
 }
 
 export async function readJson<T>(request: Request): Promise<T | null> {
