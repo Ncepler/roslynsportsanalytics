@@ -324,3 +324,10 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 - **Made-up data is allowed ONLY on `/test`**, and it is labeled as simulated on the page and above every result. **Never** use simulated or invented data on the real Analyze page or the real Season tab (section 3, rule 1).
 - It skips the game picker and never saves (no made-up games or results on real pages). Each simulated game plants one scoring mistake (the third quarter when it has a score) so the scoreboard check visibly catches it.
 - The simulated season (18 basketball and 12 lacrosse made-up games, `lib/demo/season.ts`) is written as rows in the club's sheet layouts and runs through the **same** Season tab, parser and math as the real one. Its summary is filled in from the computed numbers without calling an AI.
+
+## 22. Demo pages and the Data & privacy page (Noah, Nov 13)
+
+- `/test` and `/test/season` are two real routes (shared frame in `app/(app)/test/layout.tsx`). On `/test*`, the header tabs "Analyze a game" and "Season trends" point to `/test` and `/test/season`, so the simulation never leaks onto the real pages. Components: `components/analyze/demo-analyze.tsx`, `components/season/demo-season.tsx`, `components/analyze/test-tabs.tsx` (replaced `demo-flow.tsx`).
+- `/breakdown` ("Data & privacy" tab): plain-language account of where data goes, for Noah to show the athletic director. **Keep it in step with sections 3, 6, 14 and 21** whenever storage or vendors change.
+- **Funding (Noah, Nov 13):** Noah pays for the AI (Gemini, Claude, Vercel) with his own money, never club or school funds. The breakdown page says so.
+- **NY Education Law 2-d:** read only through public summaries (the sandbox could not reach nysenate.gov). The page makes no compliance claim; it says the district's data protection officer decides whether 2-d covers the tool. Noah should check the statute text and ask the district before real use.
