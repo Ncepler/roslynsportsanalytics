@@ -1,11 +1,16 @@
 import { db } from "./client";
 import { dbFail, DbError } from "./errors";
 import type { GameRow, TeamRow } from "./admin";
-import { toRows, type SaveBody } from "./save-schema";
+import { fromRows, toRows, type SaveBody } from "./save-schema";
+import { allSheets } from "@/lib/sheets";
+import { getSport } from "@/lib/sports";
 import { hasStats } from "@/lib/teams/options";
 
 // Saving and reading analyzed games. The write is one database function call (migration 0002), so a
 // replace is all-or-nothing. Only logged or user-edited fields are stored; never derived numbers.
+
+/** Version of the formulas behind the stored stats snapshot. Bump when a formula in lib/derive changes. */
+export const STATS_FORMULA_VERSION = 1;
 
 /** Version of the stored possession format. Bump when the shape of `events` changes. */
 export const SCHEMA_VERSION = 1;
@@ -101,6 +106,13 @@ export async function getTeam(id: string): Promise<TeamRow> {
   return data as TeamRow;
 }
 
+async function opponentNameOf(gameId: string): Promise<string> {
+  const { data, error } = await db().from("games").select("opponent:opponents(name)").eq("id", gameId).maybeSingle();
+  if (error) dbFail(error);
+  const opp = (data as unknown as { opponent?: { name?: string } | { name?: string }[] | null } | null)?.opponent;
+  return (Array.isArray(opp) ? opp[0]?.name : opp?.name) ?? "Opponent";
+}
+
 /** Saves the reviewed log to a scheduled game, or to a quick-added one. Returns the game id. */
 export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gameId: string; created: boolean }> {
   const team = await getTeam(body.team_id);
@@ -132,6 +144,19 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
   }
   if (!gameId) throw new DbError(400, "Choose a game or add one.");
 
+  // Noah, Nov 14: every stat tracked for a game is stored with it, so it is still there if it is wanted later.
+  // The possession log above holds every logged stat; this snapshot adds the computed tables (points, efficiency,
+  // percentages, totals) as they were when the game was saved. Season trends still recompute from the log on read, so
+  // a formula fix reaches past games there; the snapshot is the saved record.
+  const opponentName = body.quick?.opponent_name ?? (await opponentNameOf(gameId));
+  const snapshotLog = fromRows(toRows(body.log.possessions) as never, body.log.scoreboard);
+  const statsSnapshot = {
+    formula_version: STATS_FORMULA_VERSION,
+    computed_at: new Date().toISOString(),
+    stat_ids: body.stat_ids,
+    sheets: getSport(team.sport) ? allSheets(snapshotLog, body.stat_ids, opponentName, team.sport, body.starters.filter(Boolean) as string[]) : [],
+  };
+
   const { error } = await db().rpc("save_game_analysis", {
     p_game_id: gameId,
     p_model: model,
@@ -140,7 +165,7 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
     p_source_filename: null,
     p_our_score: body.our_score ?? null,
     p_opp_score: body.opp_score ?? null,
-    p_meta: { stat_ids: body.stat_ids, starters: body.starters.filter(Boolean), scoreboard: body.log.scoreboard },
+    p_meta: { stat_ids: body.stat_ids, starters: body.starters.filter(Boolean), scoreboard: body.log.scoreboard, stats_snapshot: statsSnapshot },
     p_possessions: toRows(body.log.possessions),
   });
   if (error) {

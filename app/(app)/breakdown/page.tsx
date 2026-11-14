@@ -45,7 +45,7 @@ export default function BreakdownPage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>Teams, seasons, opponent names and the game schedule (date, home or away, location).</li>
             <li>Whether a game is scheduled or analyzed, and a final score if a member typed one.</li>
-            <li>Each analyzed game&apos;s log, one row per possession: shots and makes, turnovers, fouls, clock readings and jersey numbers such as #23. Totals and percentages are never stored; they are calculated each time.</li>
+            <li>Each analyzed game&apos;s log, one row per possession: shots and makes, turnovers, fouls, clock readings and jersey numbers such as #23. The game&apos;s calculated totals and percentages are saved with it too, so every stat tracked is still there later.</li>
           </ul>
           <p>These live in a Supabase database that belongs to the club. Only the app&apos;s server can read it, and an admin can download or delete everything.</p>
         </Card>
