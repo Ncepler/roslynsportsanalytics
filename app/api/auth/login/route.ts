@@ -9,9 +9,8 @@ function fail(status: number, error: string) {
   return NextResponse.json({ error }, { status });
 }
 
-/** Test button role. In a production build it is ALWAYS demo, whatever the env says. */
+/** Test button role: whatever TEST_LOGIN_ROLE says (admin | member | demo), and demo if it is unset or invalid. */
 function testRole(): Role {
-  if (process.env.NODE_ENV === "production") return "demo";
   const wanted = process.env.TEST_LOGIN_ROLE;
   return isRole(wanted) ? wanted : "demo";
 }
@@ -30,9 +29,10 @@ export async function POST(request: Request) {
 
   let role: Role;
   if (body.mode === "test") {
-    // TEST LOGIN. The deployed URL has been shared with school staff, so in production
-    // this only ever grants "demo": the fake-data simulation, no database, no AI calls.
-    // Locally, TEST_LOGIN_ROLE (admin | member | demo) picks the role.
+    // TEST LOGIN: a stand-in for a password until the real passwords are set (Noah, Nov 14). While
+    // ALLOW_TEST_LOGIN is "true", anyone who has the URL gets the role in TEST_LOGIN_ROLE, so setting that
+    // to admin or member gives them real data and lets them spend API credits. When the passwords are set,
+    // set ALLOW_TEST_LOGIN=false (and unset TEST_LOGIN_ROLE) and redeploy.
     if (process.env.ALLOW_TEST_LOGIN !== "true") {
       return fail(403, "Test login is turned off.");
     }

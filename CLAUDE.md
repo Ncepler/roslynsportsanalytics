@@ -9,7 +9,7 @@ Read this whole file before doing anything. It holds every decision made so far 
 
 **Do next (Noah):** (1) run `0002_save_game.sql` in the club Supabase SQL editor; (2) put `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLUB_PASSWORD`, `ADMIN_PASSWORD` in `.env.local` and in Vercel, redeploy; (3) ask Claude to run the live checks (create a team and season, add a game, save a log, re-save, open Season); (4) then a real clip. **Never run SQL yourself:** write numbered migration files, print the SQL, and tell Noah to run it in the club Supabase SQL editor (his rule for this project). Start each new phase in plan mode.
 
-**Reminder for Noah:** the club password will be the club's Google Classroom password. Set it as `CLUB_PASSWORD` in Vercel and never write it into this file or the code. In production, Test only ever gives the demo role; set `ALLOW_TEST_LOGIN=false` to remove the button. The deployed URL has been emailed to school staff.
+**Reminder for Noah:** the club password will be the club's Google Classroom password. Set it as `CLUB_PASSWORD` in Vercel and never write it into this file or the code. Until then Test grants the role in `TEST_LOGIN_ROLE`; when the passwords are set, set `ALLOW_TEST_LOGIN=false` and unset `TEST_LOGIN_ROLE`. The deployed URL has been emailed to school staff.
 
 ---
 
@@ -190,7 +190,7 @@ v1 = the two sheets Noah showed (section 10): turnovers by quarter for both team
 
 - One signed `httpOnly` `session` cookie carries `role` (`lib/auth/session.ts`; cookies without a role are rejected). `proxy.ts` gates every page and API route; each API route checks the role again (`lib/api.ts`: `guarded` = member or admin, `adminGuarded` = admin).
 - **demo:** only the `/test` fake-data simulation. No database reads, no Gemini or Claude calls (pages redirect to `/test`, APIs return 403). **member** (`CLUB_PASSWORD`): view everything, analyze and save games. **admin** (`ADMIN_PASSWORD`, separate): everything a member can do, plus `/admin` and `/api/admin/*`. One login box: the password decides the role.
-- **Test button** (`ALLOW_TEST_LOGIN=true`): in any production build it always grants `demo`. Locally, `TEST_LOGIN_ROLE=admin|member|demo` picks the role. Reason: the deployed URL has been emailed to school staff, so Test must never reach real data or spend money.
+- **Test button** (`ALLOW_TEST_LOGIN=true`): Noah's stand-in for a password until the real ones exist (Nov 14; it replaced the Nov 13 rule that production Test is demo-only). It grants the role in `TEST_LOGIN_ROLE` (`admin`, `member` or `demo`; unset or invalid = demo), in any environment. **Risk:** while Test is on and `TEST_LOGIN_ROLE` is admin or member, anyone who has the URL (it has been emailed to school staff) gets real data and can spend API credits. When the real passwords are set: `ALLOW_TEST_LOGIN=false`, unset `TEST_LOGIN_ROLE`, redeploy.
 - Unauthenticated requests go to `/login?next=<path>`; login returns there only for same-site relative paths (`lib/auth/redirect.ts`, checked again by the login API). A member opening `/admin` gets a real 403 "Admins only" page (no redirect loop).
 - Login attempts and API calls are rate limited. A shared password cannot kick out one person without changing it for everyone (accepted tradeoff). The owner unlock (section 3, rule 9) is a separate signed token, available only from inside `/admin`.
 

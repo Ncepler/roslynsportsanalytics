@@ -12,7 +12,7 @@ Live pages: a team picker, then for each team **Schedule**, **Analyze a game** a
 
 | Sign-in | Password | Can do |
 |---|---|---|
-| Demo | The "Test" button on the login page | Only a practice walkthrough with made-up data. Cannot see real data or use the AI. |
+| Demo | The "Test" button, when `TEST_LOGIN_ROLE` is unset | Only a practice walkthrough with made-up data. Cannot see real data or use the AI. |
 | Member | The club password | See every team, analyze games, save and fix games. |
 | Admin | A separate admin password | Everything a member can, plus the Admin page: teams, seasons, schedules, data download. |
 
@@ -50,10 +50,10 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | `GEMINI_TIER` | `free` or `paid`. `free` shows a banner "don't upload student footage". Switch to `paid` only once billing is set up. | You set it |
 | `ANTHROPIC_API_KEY` | Lets the site write the Season summary | console.anthropic.com |
 | `CLAUDE_MODEL` | Which Claude model to use | Anthropic's model list |
-| `ALLOW_TEST_LOGIN` | `true` shows the Test button. It only ever gives the demo sign-in on the live site. | You set it |
+| `ALLOW_TEST_LOGIN` | `true` shows the Test button, which signs anyone in without a password (as the role in `TEST_LOGIN_ROLE`). Use it only until the real passwords are set, then set it to `false`. | You set it |
 | `ADMIN_BYPASS_CODE` | Secret code for the owner test. Leave empty to turn that feature off. | You choose it |
 | `BLOB_READ_WRITE_TOKEN` (or `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`) | Added by Vercel when you connect a Blob store. Used only for the few minutes a video is handed to Gemini. | Vercel → Storage |
-| `TEST_LOGIN_ROLE` | Local computer only: what the Test button grants while developing. **Never set it in Vercel.** | You set it |
+| `TEST_LOGIN_ROLE` | Which sign-in the Test button gives: `admin`, `member` or `demo` (unset = demo). While it is `admin`, anyone with the website address is an admin. Remove it once the real passwords are set. | You set it |
 
 ## Everyday tasks (no coding)
 
