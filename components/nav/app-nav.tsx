@@ -17,7 +17,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * ~200 ms on --ease-drawer / --ease-out; reduced-motion zeroes the durations. Opening and closing are the
  * only animations; tab switching elsewhere stays instant.
  */
-export function AppNav({ teams, isAdmin, drawer }: { teams: NavTeam[]; isAdmin: boolean; drawer: boolean }) {
+export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; isAdmin: boolean; drawer: boolean; /** Current season, short form like "26/27", shown by every team. */ season?: string | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -127,9 +127,10 @@ export function AppNav({ teams, isAdmin, drawer }: { teams: NavTeam[]; isAdmin: 
                                 href={`/t/${t.slug}`}
                                 aria-current={active ? "page" : undefined}
                                 onClick={() => setOpen(false)}
-                                className={`flex min-h-11 items-center rounded-[0.5rem] px-2 text-[0.9375rem] ${active ? "bg-surface-sunken font-medium text-text" : "text-text [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken"}`}
+                                className={`flex min-h-11 items-center justify-between gap-2 rounded-[0.5rem] px-2 text-[0.9375rem] ${active ? "bg-surface-sunken font-medium text-text" : "text-text [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken"}`}
                               >
-                                {teamName(t)}
+                                <span>{teamName(t)}</span>
+                                {season && <span className="text-xs tabular-nums text-muted">{season}</span>}
                               </Link>
                             </li>
                           );

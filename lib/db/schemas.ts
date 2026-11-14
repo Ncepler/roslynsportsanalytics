@@ -82,3 +82,36 @@ export function parse<T>(schema: z.ZodType<T>, data: unknown): T {
   }
   return result.data;
 }
+
+// ---------- adding many games at once ----------
+
+export const importBody = z
+  .object({
+    team_id: uuid,
+    season_id: uuid,
+    games: z
+      .array(
+        z
+          .object({
+            game_date: isoDate,
+            opponent_name: z.string().trim().min(1, "Every game needs an opponent.").max(80, "Opponent names must be under 80 characters."),
+            home_away: z.enum(["home", "away"], { message: "Choose home or away for every game." }),
+            location,
+          })
+          .strict(),
+      )
+      .min(1, "Nothing to add.")
+      .max(60, "Add at most 60 games at a time."),
+  })
+  .strict();
+
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const readBody = z
+  .object({
+    season_id: uuid,
+    images: z
+      .array(z.object({ mediaType: z.enum(IMAGE_TYPES, { message: "Use PNG, JPG or WebP pictures." }), data: z.string().min(100).max(2_200_000) }).strict())
+      .min(1, "Add at least one screenshot.")
+      .max(3, "Add up to 3 screenshots."),
+  })
+  .strict();

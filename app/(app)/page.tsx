@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireMember } from "@/lib/auth/server";
-import { listActiveTeams, tryDb } from "@/lib/db/read";
+import { getCurrentSeasonLabel, listActiveTeams, tryDb } from "@/lib/db/read";
+import { shortSeason } from "@/lib/schedule/dates";
 import { SPORTS, teamName } from "@/lib/teams/options";
 
 export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
@@ -10,7 +11,8 @@ export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
 // Home: pick a team. (Demo users are sent to /test by proxy.ts and never reach the database.)
 async function Teams() {
   await requireMember();
-  const result = await tryDb(listActiveTeams);
+  const [result, seasonResult] = await Promise.all([tryDb(listActiveTeams), tryDb(getCurrentSeasonLabel)]);
+  const season = seasonResult.ok && seasonResult.data ? shortSeason(seasonResult.data) : null;
   if (!result.ok) {
     return (
       <div role="alert" className="rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
@@ -34,8 +36,9 @@ async function Teams() {
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
             {g.teams.map((t) => (
               <li key={t.id}>
-                <Link href={`/t/${t.slug}`} className="flex min-h-14 items-center rounded-[0.75rem] border border-border bg-surface px-4 font-medium [@media(hover:hover)_and_(pointer:fine)]:hover:border-border-strong">
-                  {teamName(t)}
+                <Link href={`/t/${t.slug}`} className="flex min-h-14 items-center justify-between gap-3 rounded-[0.75rem] border border-border bg-surface px-4 font-medium [@media(hover:hover)_and_(pointer:fine)]:hover:border-border-strong">
+                  <span>{teamName(t)}</span>
+                  {season && <span className="text-sm font-normal tabular-nums text-muted">{season}</span>}
                 </Link>
               </li>
             ))}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { formatGameDate } from "@/components/games/status-chip";
 import { api, ApiError } from "@/lib/client/api";
 import type { GameRow, OpponentRow, SeasonRow, TeamRow } from "@/lib/db/admin";
+import { ScheduleImport } from "@/components/admin/schedule-import";
 import { GENDERS, hasStats, LEVELS, SPORTS, teamName } from "@/lib/teams/options";
 
 const NEW_OPPONENT = "__new";
@@ -461,6 +462,27 @@ function ScheduleSection({
         </div>
       </form>
       <Problem text={error} />
+
+      {(() => {
+        const team = activeTeams.find((t) => t.id === effectiveTeam);
+        const season = seasons.find((s) => s.id === effectiveSeason);
+        return team && season ? (
+          <ScheduleImport
+            key={`${team.id}-${season.id}`}
+            teamId={team.id}
+            teamLabel={teamName(team)}
+            seasonId={season.id}
+            seasonLabel={season.label}
+            seasonRange={{ start: season.start_date, end: season.end_date }}
+            existing={(games ?? []).map((g) => ({ game_date: g.game_date, opponent: g.opponent?.name ?? null }))}
+            opponents={opponents.map((o) => o.name)}
+            onDone={async () => {
+              await load();
+              await onOpponentsChange();
+            }}
+          />
+        ) : null;
+      })()}
 
       {games === null ? (
         <p className="text-sm text-muted">Loading…</p>

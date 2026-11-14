@@ -97,6 +97,21 @@ export async function generateJson(opts: { prompt: string; schema: Record<string
   return interaction.output_text ?? "";
 }
 
+/** One request with up to a few pictures that must answer in JSON matching `schema` (nothing stored by Gemini). */
+export async function generateJsonFromImages(opts: { prompt: string; images: { mediaType: string; data: string }[]; schema: Record<string, unknown> }): Promise<string> {
+  const interaction = await gemini().interactions.create({
+    model: geminiModel(),
+    store: false,
+    input: [
+      ...opts.images.map((i) => ({ type: "image" as const, data: i.data, mime_type: i.mediaType as "image/jpeg" })),
+      { type: "text" as const, text: opts.prompt },
+    ],
+    generation_config: { temperature: 0 },
+    response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
+  });
+  return interaction.output_text ?? "";
+}
+
 /** Starts a background analysis; returns the interaction id to poll. */
 export async function startVideoInteraction(opts: {
   uri: string;

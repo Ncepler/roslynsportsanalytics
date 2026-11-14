@@ -25,3 +25,10 @@ export async function tryDb<T>(fn: () => Promise<T>): Promise<{ ok: true; data: 
     return { ok: false, message: err instanceof DbError ? err.message : "Couldn't reach the database. Try again." };
   }
 }
+
+/** The current season's label (like "2026-27"), or null when none is current. */
+export async function getCurrentSeasonLabel(): Promise<string | null> {
+  const { data, error } = await db().from("seasons").select("label").eq("is_current", true).maybeSingle();
+  if (error) dbFail(error);
+  return (data?.label as string | undefined) ?? null;
+}
