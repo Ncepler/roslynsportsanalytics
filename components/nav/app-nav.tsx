@@ -119,8 +119,8 @@ export function AppNav({ teams, drawer, season }: { teams: NavTeam[]; drawer: bo
                     <div key={g.sport.value} className="mb-4">
                       <h2 className="px-2 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-muted">{g.sport.label}</h2>
                       {[
-                        { label: "Girls", list: g.girls },
                         { label: "Boys", list: g.boys },
+                        { label: "Girls", list: g.girls },
                       ].map((col) =>
                         col.list.length === 0 ? null : (
                           <div key={col.label} className="mb-2">

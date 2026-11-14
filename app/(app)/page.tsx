@@ -50,14 +50,18 @@ async function Teams() {
         <section key={g.sport.value}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.04em] text-muted">{g.sport.label}</h2>
           <div className="mt-2 grid gap-x-3 gap-y-4 sm:grid-cols-2">
-            <div>
-              <h3 className="mb-2 text-xs font-medium text-muted">Girls</h3>
-              <TeamLinks teams={g.girls} season={season} />
-            </div>
-            <div>
-              <h3 className="mb-2 text-xs font-medium text-muted">Boys</h3>
-              <TeamLinks teams={g.boys} season={season} />
-            </div>
+            {g.boys.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-medium text-muted">Boys</h3>
+                <TeamLinks teams={g.boys} season={season} />
+              </div>
+            )}
+            {g.girls.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-medium text-muted">Girls</h3>
+                <TeamLinks teams={g.girls} season={season} />
+              </div>
+            )}
           </div>
         </section>
       ))}
