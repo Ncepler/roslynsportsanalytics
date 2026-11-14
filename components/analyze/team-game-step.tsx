@@ -57,7 +57,7 @@ export function TeamGameStep({
       <p className="hint mt-1 max-w-[38rem]">Pick the game from this team&apos;s schedule. It is saved to that game when you finish the review.</p>
 
       {scheduled.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No games waiting to be analyzed. Add the game below, or ask an admin to add it to the schedule.</p>
+        <p className="mt-4 text-sm text-muted">No scheduled games are waiting to be analyzed. If the game isn&apos;t on the schedule, add it below.</p>
       ) : (
         <ul className="mt-4 divide-y divide-border rounded-[0.75rem] border border-border">
           {scheduled.map((g) => (

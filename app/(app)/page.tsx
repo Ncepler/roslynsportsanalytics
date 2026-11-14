@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { FirstTeams } from "@/components/admin/first-teams";
 import { requireMember } from "@/lib/auth/server";
 import { listActiveTeams, tryDb } from "@/lib/db/read";
 import { SPORTS, teamName } from "@/lib/teams/options";
@@ -10,7 +9,7 @@ export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
 
 // Home: pick a team. (Demo users are sent to /test by proxy.ts and never reach the database.)
 async function Teams() {
-  const role = await requireMember();
+  await requireMember();
   const result = await tryDb(listActiveTeams);
   if (!result.ok) {
     return (
@@ -21,16 +20,8 @@ async function Teams() {
   }
   if (result.data.length === 0) {
     return (
-      <div className="rounded-[0.75rem] border border-border bg-surface-sunken px-5 py-8">
-        <p className="text-center font-medium">No teams yet</p>
-        {role === "admin" ? (
-          <>
-            <p className="mt-1 text-center text-sm text-muted">Add the club&apos;s teams to get started.</p>
-            <FirstTeams />
-          </>
-        ) : (
-          <p className="mt-1 text-center text-sm text-muted">The club&apos;s teams haven&apos;t been set up yet. Check back soon, or ask an admin.</p>
-        )}
+      <div className="rounded-[0.75rem] border border-border bg-surface-sunken px-5 py-8 text-center">
+        <p className="font-medium">No teams set up yet</p>
       </div>
     );
   }

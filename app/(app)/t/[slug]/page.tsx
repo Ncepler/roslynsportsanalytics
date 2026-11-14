@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { FirstSeason } from "@/components/admin/first-season";
 import { formatGameDate } from "@/components/games/status-chip";
-import { getRole, requireMember } from "@/lib/auth/server";
+import { requireMember } from "@/lib/auth/server";
 import { listGames, listSeasons } from "@/lib/db/admin";
 import { getTeamBySlug, tryDb } from "@/lib/db/read";
 
 export const metadata: Metadata = { title: "Schedule · Roslyn Film Analyzer" };
 
-// Read-only schedule for members. Admins edit it on /admin.
+// Read-only schedule.
 async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]">["params"]; searchParams: PageProps<"/t/[slug]">["searchParams"] }) {
   await requireMember();
   const { slug } = await params;
   const { season: seasonParam } = await searchParams;
-  const isAdmin = (await getRole()) === "admin";
 
   const result = await tryDb(async () => {
     const team = await getTeamBySlug(slug);
@@ -52,14 +50,7 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
         </nav>
       )}
       {!season ? (
-        <div>
-          <p className="text-sm text-muted">{isAdmin ? "Games are scheduled within a season, and there isn't one yet." : "No season has been set up yet. Check back soon, or ask an admin."}</p>
-          {isAdmin && (
-            <div className="mt-4">
-              <FirstSeason />
-            </div>
-          )}
-        </div>
+        <p className="text-sm text-muted">No schedule set up yet.</p>
       ) : games.length === 0 ? (
         <p className="text-sm text-muted">No games scheduled for {season.label}.</p>
       ) : (
@@ -83,13 +74,6 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
             </li>
           ))}
         </ul>
-      )}
-      {isAdmin && (
-        <p className="mt-4 text-sm text-muted">
-          <Link href="/admin" className="text-accent underline underline-offset-2">
-            Edit the schedule in Admin
-          </Link>
-        </p>
       )}
     </div>
   );

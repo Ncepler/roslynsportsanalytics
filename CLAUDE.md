@@ -23,6 +23,7 @@ Background: last year the club tracked basketball shots vs makes by context (fas
 
 ## 2. How Noah likes to work
 
+- **Empty and unfinished states say what is true, nothing more (Noah, Nov 14).** "No teams set up yet", "No schedule set up yet". Never tell a user to go add something, never mention Admin, and never put "add it" buttons on member-facing pages. Admins reach Admin from the menu.
 - Keep explanations condensed and simple by default. Fewer sections, less detail. Expand only when asked.
 - Give honest, calibrated assessments. No sugarcoating, no manufactured flaws. If an idea is good, say so plainly. If it is flawed, explain exactly how and why.
 - For big outputs, lay out what you will produce first and wait for approval before writing it.
