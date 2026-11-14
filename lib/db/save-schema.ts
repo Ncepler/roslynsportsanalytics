@@ -70,7 +70,6 @@ export const saveBody = z
     reopen: z.boolean().optional(),
     confirm_replace: z.boolean().optional(),
     clearance: z.string().max(4000).optional(),
-    source_filename: z.string().trim().max(200).nullish(),
     our_score: score,
     opp_score: score,
     stat_ids: z.array(z.string().max(60)).max(60),
@@ -94,7 +93,8 @@ export function toRows(possessions: SaveBody["log"]["possessions"]) {
     shooter: null,
     confidence: p.confidence,
     needs_review: false,
-    note: p.note,
+    // Free text (the AI's note, a typed note) could contain a student's name, so it is never stored.
+    note: null,
     events: p.events,
   }));
 }

@@ -10,7 +10,6 @@ export type SaveInput = {
   reopen?: boolean;
   confirm_replace?: boolean;
   clearance?: string;
-  source_filename?: string | null;
   our_score?: number | null;
   opp_score?: number | null;
   stat_ids: string[];

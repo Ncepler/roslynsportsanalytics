@@ -28,14 +28,19 @@ export async function listTeamGames(teamId: string): Promise<{ scheduled: Pickab
 }
 
 async function findOrCreateOpponent(name: string): Promise<string> {
-  const found = await db().from("opponents").select("id").ilike("name", name.replace(/[%_\\]/g, "\\$&")).limit(1);
-  if (found.error) dbFail(found.error);
-  if (found.data?.[0]) return found.data[0].id as string;
+  // Compared in code, not with ilike: PostgREST treats "*" in ilike as a wildcard, so a typed "P*" could match "Port Washington".
+  const sameName = async () => {
+    const { data, error } = await db().from("opponents").select("id, name");
+    if (error) dbFail(error);
+    return (data ?? []).find((o: { id: string; name: string }) => o.name.trim().toLowerCase() === name.trim().toLowerCase())?.id as string | undefined;
+  };
+  const existing = await sameName();
+  if (existing) return existing;
   const made = await db().from("opponents").insert({ name }).select("id").single();
   if (made.error) {
     // Lost a race with someone adding the same name: read it again.
-    const again = await db().from("opponents").select("id").ilike("name", name.replace(/[%_\\]/g, "\\$&")).limit(1);
-    if (again.data?.[0]) return again.data[0].id as string;
+    const again = await sameName();
+    if (again) return again;
     dbFail(made.error);
   }
   return made.data.id as string;
@@ -90,7 +95,8 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
     p_game_id: gameId,
     p_model: model,
     p_schema_version: SCHEMA_VERSION,
-    p_source_filename: body.source_filename ?? null,
+    // A file name can contain a student's name ("Jaylen 30 pt game.mp4"), so it is never stored.
+    p_source_filename: null,
     p_our_score: body.our_score ?? null,
     p_opp_score: body.opp_score ?? null,
     p_meta: { stat_ids: body.stat_ids, starters: body.starters.filter(Boolean), scoreboard: body.log.scoreboard },

@@ -149,7 +149,6 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
       ...(game.id ? { game_id: game.id } : { quick: { opponent_name: game.opponent, game_date: game.date, home_away: game.homeAway } }),
       reopen: game.reopened || undefined,
       clearance: game.reopened ? undefined : (savedClearance.current ?? undefined),
-      source_filename: file?.name ?? null,
       our_score: opts.roslyn,
       opp_score: opts.opponent,
       stat_ids: setup.statIds,

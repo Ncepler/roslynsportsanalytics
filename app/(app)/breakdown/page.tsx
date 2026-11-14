@@ -37,7 +37,7 @@ export default function BreakdownPage() {
             <li>The game video. It is passed through for the analysis, then deleted.</li>
             <li>Face data of any kind. There is no face recognition and no reference photos are sent.</li>
             <li>Appearance notes (&ldquo;#5, white jersey, headband&rdquo;). They exist for one run, then are discarded.</li>
-            <li>The AI&apos;s play-by-play descriptions of what it saw. (A short note on a whole possession is kept.)</li>
+            <li>The AI&apos;s descriptions or notes about what it saw, and the video&apos;s file name (either could contain a name).</li>
             <li>Student names. The app only uses jersey numbers, and tracker names are never entered.</li>
           </ul>
         </Card>
