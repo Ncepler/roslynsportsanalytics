@@ -3,6 +3,7 @@ import { dbFail } from "./errors";
 import { fromRows } from "./save-schema";
 import { flaggedQuarters, scoreboardCheck } from "@/lib/derive";
 import type { ScoreboardReading } from "@/lib/gemini/log-types";
+import { buildExtras, type GameExtras } from "@/lib/season/extras";
 import { gameKey, type RawTab } from "@/lib/season/parse";
 import type { Score } from "@/lib/season/model";
 import { allSheets } from "@/lib/sheets";
@@ -21,6 +22,8 @@ export type StoredSeasonData = {
   /** Typed final scores, keyed the way the Season model keys games. */
   scores: Record<string, Score>;
   games: IncludedGame[];
+  /** Extra per-game numbers computed from each log (basketball), keyed like `scores`. */
+  extras: Record<string, GameExtras>;
   /** Games (and rows) still carrying something to double-check: low-confidence possessions or a failed scoreboard check. */
   needsReview: { games: number; rows: number };
 };
@@ -58,6 +61,7 @@ export async function loadStoredSeason(team: { id: string; sport: "basketball" |
   const config = getSport(team.sport);
   const tabs: RawTab[] = [];
   const scores: Record<string, Score> = {};
+  const extras: Record<string, GameExtras> = {};
   const included: IncludedGame[] = [];
   const used = new Map<string, number>();
   let needsGames = 0;
@@ -75,6 +79,7 @@ export async function loadStoredSeason(team: { id: string; sport: "basketball" |
     for (const sheet of allSheets(log, statIds, opponent, team.sport, meta.starters ?? [])) {
       tabs.push({ file: "Saved games", name: `${name} - ${sheet.id}`, rows: [...sheet.header, ...sheet.rows] });
     }
+    if (team.sport === "basketball") extras[gameKey(name)] = buildExtras(log, statIds);
     const lowRows = log.possessions.filter((p) => p.confidence === "low").length;
     const mismatchedQuarters = flaggedQuarters(scoreboardCheck(log));
     if (lowRows > 0 || mismatchedQuarters.length > 0) needsGames += 1;
@@ -84,5 +89,5 @@ export async function loadStoredSeason(team: { id: string; sport: "basketball" |
     included.push({ name, date: g.game_date, opponent, lowRows, mismatchedQuarters, hasScore });
   }
 
-  return { sport: team.sport, seasonLabel: season.label, tabs, scores, games: included, needsReview: { games: needsGames, rows: needsRows } };
+  return { sport: team.sport, seasonLabel: season.label, tabs, scores, extras, games: included, needsReview: { games: needsGames, rows: needsRows } };
 }

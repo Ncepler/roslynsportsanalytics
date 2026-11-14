@@ -11,6 +11,9 @@ export type SummaryInput = {
   pairs: { stat: string; outcome: string; r: number | null; n: number; shown: boolean }[];
   minGames: number;
   minAbsR: number;
+  /** What has and hasn't worked: pairs that already passed the thresholds, worded by code. */
+  worked?: { text: string; r: number; n: number }[];
+  notWorked?: { text: string; r: number; n: number }[];
 };
 
 export type SummaryOutput = { summary: string; hypotheses: string[] };
@@ -33,6 +36,7 @@ export function summaryPrompt(input: SummaryInput): string {
     "- Quote only numbers that appear in the data below. Do not compute, round differently, total, average, or estimate anything new. If you want a number that isn't there, leave it out.",
     '- Say "goes together with", never "causes" or "leads to".',
     `- Only mention a relationship as a trend if its "shown" is true (at least ${input.minGames} games and |r| of at least ${input.minAbsR}). Say plainly that others may be chance with this many games.`,
+    "- If \"worked\" or \"notWorked\" are present, say plainly which stats have gone with better results this season and which have gone with worse ones, using their text as given (they already passed the thresholds).",
     "- Hypotheses are questions worth testing next, with no numbers in them.",
     "- Plain words, short sentences. No jargon.",
     "",

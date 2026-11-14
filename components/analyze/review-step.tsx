@@ -99,7 +99,7 @@ export function ReviewStep({
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Game stats</h2>
         <p className="hint mt-1 mb-4">Every number is worked out by the app from the possession log below. Fix the log and these update.</p>
-        <GameStatsView log={log} sportId={setup.sportId} statIds={setup.statIds} away={away} />
+        <GameStatsView log={log} sportId={setup.sportId} statIds={setup.statIds} away={away} demo={demo} />
       </section>
 
       <details>

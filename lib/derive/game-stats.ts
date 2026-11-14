@@ -170,8 +170,20 @@ export const MIN_TEAM_POINTS = 10;
 
 /** Each team's points split by where they came from, as a share of that team's points. Small samples are left out. */
 export function pointSources(log: PossessionLog, team: Team, sportId: string): { totalPoints: number; sources: PointSource[] } {
-  const totalPoints = log.possessions.filter((p) => p.team === team).reduce((s, p) => s + possessionPoints(p), 0);
+  const { totalPoints, raw } = rawPointSources(log, team, sportId);
   if (totalPoints < MIN_TEAM_POINTS) return { totalPoints, sources: [] };
+  return {
+    totalPoints,
+    sources: raw
+      .filter((r) => r.points >= MIN_SOURCE_POINTS)
+      .map((r) => ({ ...r, share: r.points / totalPoints }))
+      .sort((a, b) => b.share - a.share),
+  };
+}
+
+/** Every source with its points, no minimum sample. Season totals add these up across games and apply the minimums once, to the season. */
+export function rawPointSources(log: PossessionLog, team: Team, sportId: string): { totalPoints: number; raw: { id: string; label: string; points: number }[] } {
+  const totalPoints = log.possessions.filter((p) => p.team === team).reduce((s, p) => s + possessionPoints(p), 0);
   const raw: { id: string; label: string; points: number }[] = [];
 
   if (sportId === "basketball") {
@@ -195,13 +207,7 @@ export function pointSources(log: PossessionLog, team: Team, sportId: string): {
     for (const z of shotsByZone(log, team, sportId).zones) raw.push({ id: `zone-${z.id}`, label: `goals from ${z.label.toLowerCase()}`, points: z.made });
   }
 
-  return {
-    totalPoints,
-    sources: raw
-      .filter((r) => r.points >= MIN_SOURCE_POINTS)
-      .map((r) => ({ ...r, share: r.points / totalPoints }))
-      .sort((a, b) => b.share - a.share),
-  };
+  return { totalPoints, raw };
 }
 
 // ---------- the header strip ----------

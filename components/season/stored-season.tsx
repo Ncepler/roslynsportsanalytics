@@ -11,7 +11,7 @@ import { SeasonResults } from "./season-tab";
 // the club's sheets, which go through the same reader and math as before. Every number is computed in code.
 export function StoredSeason({ data }: { data: StoredSeasonData }) {
   const { read } = useMemo(() => readTabs(data.tabs), [data.tabs]);
-  const games = useMemo(() => buildGames(read).filter((g) => g.sport === data.sport), [read, data.sport]);
+  const games = useMemo(() => buildGames(read).filter((g) => g.sport === data.sport).map((g) => ({ ...g, extras: data.extras[g.key] ?? null })), [read, data.sport, data.extras]);
   const [scores] = useState(data.scores);
   const usable = games.length;
 

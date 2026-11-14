@@ -3,6 +3,7 @@
 // a value the sheets don't support is null, never guessed.
 
 import type { Context } from "@/lib/gemini/log-types";
+import type { GameExtras, TeamExtras } from "./extras";
 import { MIN_ABS_R, MIN_GAMES, pearson } from "./stats";
 import { gameKey, KIND_LABEL, type ContextLine, type ReadTab, type SheetKind, type SkippedTab } from "./parse";
 
@@ -42,6 +43,8 @@ export type Game = {
   basketball: BasketballGame | null;
   lacrosse: LacrosseGame | null;
   plusMinus: { number: string; total: number | null }[] | null;
+  /** Extra numbers computed from the stored log (stored games only; basketball). */
+  extras?: GameExtras | null;
 };
 
 export type Score = { roslyn: number | null; opponent: number | null };
@@ -143,6 +146,8 @@ const margin = (s?: Score) => (s && s.roslyn !== null && s.opponent !== null ? s
 const laxTotal = (xs: (number | null)[] | null) => (xs ? sum(xs) : null);
 const laxDefTotal = (l: LacrosseGame, k: "possessions" | "goals") => (l.defense ? sum(CONTEXTS.map((c) => l.defense![c][k])) : null);
 
+const SCORING = ["points", "efficiency"];
+
 /** Stats that might move with an outcome. */
 export const METRICS: Measure[] = [
   { id: "fb-share", label: "Share of possessions on fast breaks (%)", sport: "basketball", value: (g) => (g.basketball ? pct(g.basketball.byContext.F.possessions, totalPossessions(g.basketball)) : null) },
@@ -153,6 +158,28 @@ export const METRICS: Measure[] = [
   { id: "fta", label: "Free throw attempts", sport: "basketball", value: (g) => g.basketball?.fta ?? null },
   { id: "pace", label: "Possessions", sport: "basketball", value: (g) => (g.basketball ? totalPossessions(g.basketball) : null), linkedTo: ["points", "efficiency"] },
   { id: "poss-time", label: "Average possession length (s)", sport: "basketball", value: (g) => g.basketball?.avgPossessionSeconds ?? null },
+  // From the stored log (Noah, Nov 14). Components of points are excluded against points and efficiency (that would
+  // only find arithmetic); they are still tested against the point margin when final scores are entered.
+  { id: "fg-pct", label: "Field goal %", sport: "basketball", value: (g) => g.extras?.roslyn.fgPct ?? null, linkedTo: SCORING },
+  { id: "efg-pct", label: "Effective field goal %", sport: "basketball", value: (g) => g.extras?.roslyn.efgPct ?? null, linkedTo: SCORING },
+  { id: "fg3-pct", label: "3-point %", sport: "basketball", value: (g) => g.extras?.roslyn.fg3Pct ?? null, linkedTo: SCORING },
+  { id: "ft-pct", label: "Free throw %", sport: "basketball", value: (g) => g.extras?.roslyn.ftPct ?? null, linkedTo: SCORING },
+  { id: "tov-rate", label: "Turnover rate (% of possessions)", sport: "basketball", value: (g) => g.extras?.roslyn.tovRate ?? null },
+  { id: "pot", label: "Points off turnovers", sport: "basketball", value: (g) => g.extras?.roslyn.pointsOffTurnovers ?? null, linkedTo: SCORING },
+  { id: "second", label: "Second-chance points", sport: "basketball", value: (g) => g.extras?.roslyn.secondChance ?? null, linkedTo: SCORING },
+  { id: "fb-pts", label: "Fast-break points", sport: "basketball", value: (g) => g.extras?.roslyn.fastBreakPoints ?? null, linkedTo: SCORING },
+  { id: "paint-pts", label: "Points in the paint", sport: "basketball", value: (g) => g.extras?.roslyn.paintPoints ?? null, linkedTo: SCORING },
+  { id: "shots-taken", label: "Shots taken", sport: "basketball", value: (g) => g.extras?.roslyn.shotsTaken ?? null },
+  { id: "ast", label: "Assists", sport: "basketball", value: (g) => g.extras?.roslyn.assists ?? null },
+  { id: "stl", label: "Steals", sport: "basketball", value: (g) => g.extras?.roslyn.steals ?? null },
+  { id: "blk", label: "Blocks", sport: "basketball", value: (g) => g.extras?.roslyn.blocks ?? null },
+  { id: "fouls", label: "Fouls committed", sport: "basketball", value: (g) => g.extras?.roslyn.fouls ?? null },
+  // Defense: what the opponent did against Roslyn.
+  { id: "opp-fg-pct", label: "Opponent field goal %", sport: "basketball", value: (g) => g.extras?.opponent.fgPct ?? null },
+  { id: "opp-paint", label: "Opponent points in the paint", sport: "basketball", value: (g) => g.extras?.opponent.paintPoints ?? null },
+  { id: "opp-fb", label: "Opponent fast-break points", sport: "basketball", value: (g) => g.extras?.opponent.fastBreakPoints ?? null },
+  { id: "opp-tov", label: "Opponent turnovers (forced)", sport: "basketball", value: (g) => g.extras?.opponent.turnovers ?? null },
+  { id: "opp-pot", label: "Opponent points off turnovers", sport: "basketball", value: (g) => g.extras?.opponent.pointsOffTurnovers ?? null },
   { id: "lax-tov", label: "Roslyn turnovers", sport: "lacrosse", value: (g) => (g.lacrosse ? laxTotal(g.lacrosse.roslynTurnovers) : null) },
   { id: "lax-opp-tov", label: "Opponent turnovers", sport: "lacrosse", value: (g) => (g.lacrosse ? laxTotal(g.lacrosse.opponentTurnovers) : null) },
   { id: "lax-def-poss", label: "Opponent possessions", sport: "lacrosse", value: (g) => (g.lacrosse ? laxDefTotal(g.lacrosse, "possessions") : null), linkedTo: ["lax-goal-rate"] },
@@ -221,4 +248,28 @@ export function sheetSummary(read: ReadTab[], skipped: SkippedTab[]) {
   return { recognized: [...counts.entries()].map(([kind, n]) => ({ kind, label: KIND_LABEL[kind], tabs: n })), skipped };
 }
 
+export type WorkedItem = { stat: string; outcome: string; r: number; n: number; text: string };
+
+/**
+ * What has worked and what hasn't, from the pairs already tested (no new tests, so nothing is cherry-picked). For each
+ * stat the strongest passing pair against the point margin (or efficiency) decides which list it belongs to: more of it
+ * going with a better outcome = worked, more of it going with a worse outcome = hasn't. "Goes with", never "causes".
+ */
+export function workedLists(pairs: PairResult[]): { worked: WorkedItem[]; notWorked: WorkedItem[] } {
+  const best = new Map<string, PairResult>();
+  for (const p of pairs) {
+    if (!p.passes || p.r === null || (p.y.id !== "margin" && p.y.id !== "efficiency" && p.y.id !== "lax-margin")) continue;
+    const cur = best.get(p.x.id);
+    if (!cur || Math.abs(p.r) > Math.abs(cur.r ?? 0)) best.set(p.x.id, p);
+  }
+  const worked: WorkedItem[] = [];
+  const notWorked: WorkedItem[] = [];
+  for (const p of [...best.values()].sort((a, b) => Math.abs(b.r ?? 0) - Math.abs(a.r ?? 0))) {
+    const item: WorkedItem = { stat: p.x.label, outcome: p.y.label, r: Number(p.r!.toFixed(2)), n: p.n, text: `${Math.abs(p.r!) >= 0.7 ? "Strong" : "Moderate"} link: higher ${p.x.label.toLowerCase()} went with ${p.r! > 0 ? "higher" : "lower"} ${p.y.label.toLowerCase()}` };
+    (p.r! > 0 ? worked : notWorked).push(item);
+  }
+  return { worked, notWorked };
+}
+
+export type { TeamExtras };
 export { totalPoints, totalPossessions };

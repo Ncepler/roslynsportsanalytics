@@ -1,5 +1,7 @@
 "use client";
 
+import { ScoringSources, WorkedAndNot } from "./season-insights";
+import type { GameExtras } from "@/lib/season/extras";
 import { useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import {
@@ -11,6 +13,7 @@ import {
   totalPoints,
   totalPossessions,
   type Game,
+  workedLists,
   type PairResult,
   type Score,
   type Sport,
@@ -198,6 +201,7 @@ export function SeasonResults({
   const pairs = useMemo(() => testPairs(games, sport, scores), [games, sport, scores]);
   const ctx = useMemo(() => byContextSeason(games, sport), [games, sport]);
   const passing = pairs.filter((p) => p.passes);
+  const lists = useMemo(() => workedLists(pairs), [pairs]);
   const withScores = games.filter((g) => scores[g.key]?.roslyn != null && scores[g.key]?.opponent != null);
   const wins = withScores.filter((g) => scores[g.key].roslyn! > scores[g.key].opponent!).length;
 
@@ -225,6 +229,8 @@ export function SeasonResults({
     pairs: pairs.map((p) => ({ stat: p.x.label, outcome: p.y.label, r: p.r === null ? null : Number(p.r.toFixed(2)), n: p.n, shown: p.passes })),
     minGames: MIN_GAMES,
     minAbsR: MIN_ABS_R,
+    worked: lists.worked.map((w) => ({ text: w.text, r: w.r, n: w.n })),
+    notWorked: lists.notWorked.map((w) => ({ text: w.text, r: w.r, n: w.n })),
   };
 
   async function download() {
@@ -306,6 +312,9 @@ export function SeasonResults({
               <TableToggle head={["Game", lineLabel]} rows={linePoints.map((p) => [p.label, p.value.toFixed(1)])} />
             </section>
           )}
+
+          {sport === "basketball" && <WorkedAndNot worked={lists.worked} notWorked={lists.notWorked} games={games.length} withScores={withScores.length} />}
+          {sport === "basketball" && <ScoringSources extras={games.map((g) => g.extras).filter((x): x is GameExtras => Boolean(x))} />}
 
           <section>
             <h2 className="text-xl font-semibold tracking-[-0.01em]">Trends that hold up</h2>

@@ -66,7 +66,7 @@ function ScoreStrip({ log, away, periodName }: { log: PossessionLog; away: strin
  * The game stats page: score strip, head-to-head team stats, shot chart by zone, and the strategy notes. Every
  * number comes from the possession log (lib/derive/game-stats.ts), so editing the log updates all of it.
  */
-export function GameStatsView({ log, sportId, statIds, away }: { log: PossessionLog; sportId: string; statIds: string[]; away: string }) {
+export function GameStatsView({ log, sportId, statIds, away, demo = false }: { log: PossessionLog; sportId: string; statIds: string[]; away: string; demo?: boolean }) {
   const sport = getSport(sportId);
   const rows = useMemo(() => teamCompare(log, sportId, statIds), [log, sportId, statIds]);
   const showChart = Boolean(sport?.shotZones && (sportId === "ice-hockey" || statIds.includes("shot-zone")));
@@ -82,7 +82,7 @@ export function GameStatsView({ log, sportId, statIds, away }: { log: Possession
         </Block>
       )}
       <Block title="Game notes">
-        <StrategyNotes log={log} sportId={sportId} statIds={statIds} away={away} />
+        <StrategyNotes log={log} sportId={sportId} statIds={statIds} away={away} demo={demo} />
       </Block>
     </div>
   );
