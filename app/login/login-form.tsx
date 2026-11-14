@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 
 type Mode = "password" | "test";
 
 // If the server hasn't answered or the next page hasn't loaded after this long, say so instead of spinning forever.
 const STUCK_MS = 10_000;
 
+const subscribeNothing = () => () => {};
+/** True when the person was sent here from /admin. The Test button can never open the admin page, so it is hidden then. */
+const wantsAdmin = () => /^\/admin(\/|$|\?)/.test(new URLSearchParams(window.location.search).get("next") ?? "");
+
 export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
+  const adminRequested = useSyncExternalStore(subscribeNothing, wantsAdmin, () => false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Mode | null>(null);
@@ -78,7 +83,7 @@ export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
           aria-describedby={error ? "login-error" : undefined}
           className="min-h-11 min-w-0 flex-1 rounded-[0.625rem] border border-border-strong bg-surface px-3 text-base outline-offset-0 aria-invalid:border-danger aria-invalid:outline-danger"
         />
-        {testEnabled && (
+        {testEnabled && !adminRequested && (
           <button
             type="button"
             className="btn btn-secondary"
@@ -89,6 +94,7 @@ export function LoginForm({ testEnabled }: { testEnabled: boolean }) {
           </button>
         )}
       </div>
+      {adminRequested && <p className="mt-2 text-sm text-muted">The admin page needs the admin password. The Test button only opens the practice demo.</p>}
       <p id="login-error" role="alert" className="mt-2 min-h-5 text-sm text-danger">
         {error}
       </p>
