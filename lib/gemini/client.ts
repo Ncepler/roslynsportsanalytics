@@ -25,6 +25,40 @@ export function geminiModel(): string {
   return process.env.GEMINI_MODEL || "gemini-3.8-flash";
 }
 
+export type GeminiDiagnosis = { kind: "key" } | { kind: "model"; model: string; available: string[] } | { kind: "request"; detail: string } | { kind: "unknown" };
+
+/**
+ * Gemini's newer API answers a bad key, a wrong model name and a malformed request with the same opaque 400, so the
+ * site asks Google two tiny questions to tell them apart: is the model there for this key? Never returns the key.
+ */
+export async function diagnoseGemini(err: unknown): Promise<GeminiDiagnosis> {
+  const model = geminiModel();
+  try {
+    await gemini().models.get({ model });
+    // The key works and the model exists: the request itself was refused.
+    const detail = (err instanceof Error ? err.message : "").replace(/\s+/g, " ").slice(0, 160);
+    return { kind: "request", detail };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    const text = e instanceof Error ? e.message : "";
+    if (/api[_ ]key|API_KEY_INVALID/i.test(text) || status === 401 || status === 403) return { kind: "key" };
+    if (status === 404 || /not found|not supported/i.test(text)) {
+      let available: string[] = [];
+      try {
+        for await (const m of await gemini().models.list()) {
+          const name = (m.name ?? "").replace("models/", "");
+          if (/^gemini-.*(flash|pro)/.test(name) && !/(image|tts|embedding|live|audio|vision)/.test(name)) available.push(name);
+          if (available.length >= 8) break;
+        }
+      } catch {
+        available = [];
+      }
+      return { kind: "model", model, available };
+    }
+    return { kind: "unknown" };
+  }
+}
+
 const seconds = (s: number) => `${Math.max(0, s).toFixed(1)}s`;
 
 /**

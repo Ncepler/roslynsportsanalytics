@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { SESSION_COOKIE, canUseSite, isAdminRole, verifySessionToken } from "@/lib/auth/session";
 import { DbError } from "@/lib/db/errors";
-import { GeminiConfigError } from "@/lib/gemini/client";
+import { diagnoseGemini, GeminiConfigError } from "@/lib/gemini/client";
 
 // Shared wrapper for the Gemini API routes: rate limit plus uniform JSON
 // errors. Auth is enforced by proxy.ts before a request reaches a route.
@@ -47,7 +47,18 @@ async function guardedInner(request: Request, handler: () => Promise<Response>):
     if (status === 402) return jsonError(402, "Gemini credits are used up. Add credits in Google AI Studio.");
     if (status === 429) return jsonError(429, "Gemini rate limit hit. Wait a minute and try again.");
     if (status === 400 && /api key/i.test(err instanceof Error ? err.message : "")) return jsonError(503, "Gemini rejected the API key. Check GEMINI_API_KEY.");
-    if (status === 400 || status === 401 || status === 403) return jsonError(502, `Gemini rejected the request (HTTP ${status}). Check the API key and model name.`);
+    if (status === 400 || status === 401 || status === 403) {
+      // Say which thing is wrong (key, model name, or the request itself) instead of a guess.
+      const why = await diagnoseGemini(err);
+      console.error("Gemini rejected a request:", why.kind, `HTTP ${status}`);
+      if (why.kind === "key") return jsonError(503, "Gemini rejected the API key. GEMINI_API_KEY in Vercel isn't a valid key. Make a new one at aistudio.google.com/apikey (it starts with AIza), paste it in, and redeploy.");
+      if (why.kind === "model") {
+        const list = why.available.length ? ` Models this key can use include: ${why.available.join(", ")}.` : "";
+        return jsonError(503, `Gemini doesn't have a model called "${why.model}". Change GEMINI_MODEL in Vercel and redeploy.${list}`);
+      }
+      if (why.kind === "request") return jsonError(502, `Gemini refused this request (HTTP ${status}) even though the key and model are fine${why.detail ? `: ${why.detail}` : ""}.`);
+      return jsonError(502, `Gemini rejected the request (HTTP ${status}). Check GEMINI_API_KEY and GEMINI_MODEL in Vercel.`);
+    }
     console.error("Gemini route error:", err instanceof Error ? err.message : "unknown");
     return jsonError(502, "Gemini request failed. Try again.");
   }
