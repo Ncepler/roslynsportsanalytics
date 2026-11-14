@@ -14,8 +14,12 @@ export function NavTabs() {
   const pathname = usePathname();
   if (!(pathname === "/test" || pathname.startsWith("/test/"))) return <div className="flex-1" />;
 
+  // On phones there isn't room next to the title and Log out, and the page shows the same two tabs right under the
+  // heading, so the header copy is hidden there.
   return (
-    <nav aria-label="Main" className="flex min-w-0 flex-1 self-stretch overflow-x-auto [scrollbar-width:none] sm:gap-1">
+    <>
+    <div className="flex-1 sm:hidden" />
+    <nav aria-label="Main" className="hidden min-w-0 flex-1 self-stretch overflow-x-auto [scrollbar-width:none] sm:flex sm:gap-1">
       {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (
@@ -34,5 +38,6 @@ export function NavTabs() {
         );
       })}
     </nav>
+    </>
   );
 }

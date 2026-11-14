@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { safeNext } from "@/lib/auth/redirect";
-import { createSessionToken, isRole, safeEqual, SESSION_COOKIE, sessionCookieOptions, type Role } from "@/lib/auth/session";
+import { createSessionToken, safeEqual, SESSION_COOKIE, sessionCookieOptions, testLoginEnabled, testLoginRole, type Role, type SessionSource } from "@/lib/auth/session";
 
 type LoginBody = { mode?: unknown; password?: unknown; next?: unknown };
 
 function fail(status: number, error: string) {
   return NextResponse.json({ error }, { status });
-}
-
-/** Test button role: whatever TEST_LOGIN_ROLE says (admin | member | demo), and demo if it is unset or invalid. */
-function testRole(): Role {
-  const wanted = process.env.TEST_LOGIN_ROLE;
-  return isRole(wanted) ? wanted : "demo";
 }
 
 export async function POST(request: Request) {
@@ -28,15 +22,17 @@ export async function POST(request: Request) {
   }
 
   let role: Role;
+  let source: SessionSource;
   if (body.mode === "test") {
     // TEST LOGIN: a stand-in for a password until the real passwords are set (Noah, Nov 14). While
     // ALLOW_TEST_LOGIN is "true", anyone who has the URL gets the role in TEST_LOGIN_ROLE, so setting that
     // to admin or member gives them real data and lets them spend API credits. When the passwords are set,
     // set ALLOW_TEST_LOGIN=false (and unset TEST_LOGIN_ROLE) and redeploy.
-    if (process.env.ALLOW_TEST_LOGIN !== "true") {
+    if (!testLoginEnabled()) {
       return fail(403, "Test login is turned off.");
     }
-    role = testRole();
+    role = testLoginRole();
+    source = { kind: "test" };
   } else if (body.mode === "password") {
     const given = typeof body.password === "string" ? body.password : "";
     const adminPassword = process.env.ADMIN_PASSWORD;
@@ -47,6 +43,7 @@ export async function POST(request: Request) {
     if (isAdmin) role = "admin";
     else if (isMember) role = "member";
     else return fail(401, "Wrong password.");
+    source = { kind: "password", password: given };
   } else {
     return fail(400, "Invalid request.");
   }
@@ -55,6 +52,6 @@ export async function POST(request: Request) {
   const redirect = role === "demo" ? "/test" : (safeNext(body.next) ?? "/");
 
   const response = NextResponse.json({ ok: true, role, redirect });
-  response.cookies.set(SESSION_COOKIE, await createSessionToken(role), sessionCookieOptions);
+  response.cookies.set(SESSION_COOKIE, await createSessionToken(role, source), sessionCookieOptions);
   return response;
 }

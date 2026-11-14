@@ -16,9 +16,26 @@ const isAdminPath = (p: string) => p === "/admin" || p.startsWith("/admin/") || 
 // Next ignores the status on a rewrite, so the 403 page is returned from here. Self-contained on purpose.
 const ADMINS_ONLY_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admins only · Roslyn Film Analyzer</title><meta name="color-scheme" content="light dark"><style>body{font:16px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;padding:1rem;box-sizing:border-box}main{max-width:26rem}h1{font-size:1.75rem;letter-spacing:-.02em;margin:0 0 .5rem}p{margin:0 0 1.25rem;opacity:.75}a{display:inline-block;margin-right:.5rem;padding:.6rem 1rem;border-radius:.6rem;border:1px solid currentColor;color:inherit;text-decoration:none}</style></head><body><main><h1>Admins only</h1><p>You're signed in with the club password, which can't open this page. If you're an admin, log in again with the admin password.</p><a href="/login?next=/admin">Log in as admin</a><a href="/">Back to the site</a></main></body></html>`;
 
+function isCrossSite(request: NextRequest): boolean {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return true;
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") return origin === "null";
+  try {
+    return new URL(origin).host !== (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host);
+  } catch {
+    return true;
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isApi = pathname === "/api" || pathname.startsWith("/api/");
+
+  // Requests that change something must come from this site's own pages. A page on another site can't make a
+  // signed-in browser save, delete or log in here (cross-site request forgery). Browsers always send these headers.
+  if (isApi && !["GET", "HEAD", "OPTIONS"].includes(request.method) && isCrossSite(request)) {
+    return NextResponse.json({ error: "Requests from other sites aren't allowed." }, { status: 403 });
+  }
 
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
   if (pathname === "/login") return NextResponse.next();

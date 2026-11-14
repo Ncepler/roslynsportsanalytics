@@ -119,6 +119,8 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
   if (team.archived) throw new DbError(409, "That team is archived.");
   if (!hasStats(team.sport)) throw new DbError(400, "Stats for this sport aren't set up yet.");
 
+  // Second lock (the schema checks this too): an edit without the Roslyn-game check can never create a game.
+  if (body.reopen && (!body.game_id || body.quick)) throw new DbError(403, "Only a game that was already saved can be edited.");
   let gameId = body.game_id;
   let created = false;
   if (gameId) {

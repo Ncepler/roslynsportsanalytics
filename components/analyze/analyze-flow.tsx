@@ -94,6 +94,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   // ---------- the chosen game (real flow only; /test has no schedule) ----------
   const [game, setGame] = useState<ChosenGame | null>(null);
   const [saved, setSaved] = useState(false);
+  /** The game this run was saved to. Later saves (after fixing a row) update that same game, never add another. */
+  const [savedGameId, setSavedGameId] = useState<string | null>(null);
 
   // One person per game: choosing a scheduled game claims it, a heartbeat keeps the claim fresh, and finishing,
   // switching games or closing the page gives it back. A claim nobody refreshes expires after 30 minutes.
@@ -130,6 +132,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     }
     setGame({ id: c.kind === "scheduled" ? c.id : null, opponent: c.opponent, date: c.date, homeAway: c.homeAway, reopened: false, scores: { roslyn: null, opponent: null } });
     setSaved(false);
+    setSavedGameId(null);
     // The sport comes from the team and the opponent from the game, not from typing.
     setSetup((cur) => ({ ...cur, sportId: team.sport, awayName: c.opponent, statIds: cur.sportId === team.sport ? cur.statIds : defaultStatIds(SPORTS[team.sport]) }));
   }
@@ -139,6 +142,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     if (!team) return;
     setGame({ id: r.game.id, opponent: r.game.opponent, date: r.game.date, homeAway: "home", reopened: true, scores: { roslyn: r.game.our_score, opponent: r.game.opp_score } });
     setSaved(false);
+    setSavedGameId(null);
     setSetup({ ...basketballDefaults(), sportId: team.sport, awayName: r.game.opponent, statIds: r.statIds.length > 0 ? r.statIds : defaultStatIds(SPORTS[team.sport]) });
     setStarterNumbers(r.starters);
     setNotes(null);
@@ -159,6 +163,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     savedClearance.current = null;
     setGame(null);
     setSaved(false);
+    setSavedGameId(null);
     setFile(null);
     setVideoUrl(null);
     setDuration(null);
@@ -176,26 +181,32 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   async function saveGame(_sheets: Sheet[], opts: SaveOptions) {
     if (!game || !team || !log) return;
     if (!game.reopened && !savedClearance.current) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
+    const gameId = savedGameId ?? game.id;
+    // Saved once already (from this run, or an opened saved game): this save replaces it, and the person just said yes to that.
+    const replacing = game.reopened || savedGameId !== null;
     const payload = {
       team_id: team.id,
-      ...(game.id ? { game_id: game.id } : { quick: { opponent_name: game.opponent, game_date: game.date, home_away: game.homeAway } }),
-      reopen: game.reopened || undefined,
-      clearance: game.reopened ? undefined : (savedClearance.current ?? undefined),
+      ...(gameId ? { game_id: gameId } : { quick: { opponent_name: game.opponent, game_date: game.date, home_away: game.homeAway } }),
+      reopen: replacing || undefined,
+      confirm_replace: replacing || undefined,
+      clearance: replacing ? undefined : (savedClearance.current ?? undefined),
       our_score: opts.roslyn,
       opp_score: opts.opponent,
       stat_ids: setup.statIds,
       starters: starterNumbers,
       log: { possessions: log.possessions, scoreboard: log.scoreboard },
     };
+    let result: { game_id: string };
     try {
-      await saveGameToTeam(payload);
+      result = await saveGameToTeam(payload);
     } catch (err) {
-      // Someone saved this game while it was being reviewed (or this is an edit): replacing needs an explicit yes.
+      // Someone saved this game while it was being reviewed: replacing needs an explicit yes.
       if (err instanceof ApiError && err.code === "needs_confirm") {
         if (!window.confirm(`${err.message} Saving again replaces what was saved.`)) throw new Error("Not saved.");
-        await saveGameToTeam({ ...payload, confirm_replace: true });
+        result = await saveGameToTeam({ ...payload, confirm_replace: true });
       } else throw err;
     }
+    setSavedGameId(result.game_id);
     setSaved(true);
     onSaved?.();
   }
@@ -583,7 +594,11 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game && team ? { saved, onSave: saveGame, scores: game.scores, reopened: game.reopened, scheduleHref: `/t/${team.slug}` } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={(next) => {
+                setLog(next);
+                // A fix after saving brings the save button back, so the fix isn't lost.
+                setSaved(false);
+              }} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game && team ? { saved, onSave: saveGame, scores: game.scores, reopened: game.reopened, scheduleHref: `/t/${team.slug}` } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>

@@ -62,13 +62,13 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 
 **Add a whole schedule at once.** Admin → Schedule → "Add several games at once". Either type the games into the table, or choose "From screenshots": add up to 3 pictures of the schedule and press "Read the schedule". The AI copies the rows into the table; you check every row against the picture, fix anything marked, and press "Add N games". This only ever adds games: it can't change or delete games that are already there, and games already on the schedule are skipped. Game times aren't stored, and a neutral-site game is saved as "away" with the venue in the location.
 
-**Set up a brand-new copy of the site.** Run the three files in `supabase/migrations/` in order in the Supabase SQL editor (`0001_init.sql`, `0002_save_game.sql`, then `0003_seed_club_teams_and_schedule.sql`, which adds the club's teams, the 2026-27 season and the Roslyn Boys Varsity Basketball schedule). Then add the secret settings above.
+**Set up a brand-new copy of the site.** Run every file in `supabase/migrations/` in number order in the Supabase SQL editor (`0001_init.sql`, `0002_save_game.sql`, `0003_seed_club_teams_and_schedule.sql` which adds the club's teams, the 2026-27 season and the Roslyn Boys Varsity Basketball schedule, `0004_game_analysis_lock.sql`, then `0005_lock_public_api.sql`, which locks the public API key out of every table). Then add the secret settings above.
 
 **If something says "Gemini rejected…".** The message now quotes Google's own reason. A bad or incomplete key, a model name Google doesn't have, and a refused request each get their own message. Fix the setting it names in Vercel and redeploy.
 
 **Analyze a game.** Team → Analyze a game → pick the game (or add one that isn't on the schedule) → upload the video → trim → check who is playing → Analyze → review → Save game. To fix a saved game later, open it from "Already analyzed" on the same page.
 
-**Change a password.** In Vercel, edit `CLUB_PASSWORD` or `ADMIN_PASSWORD`, then redeploy. People already signed in stay signed in until their sign-in expires (7 days). To sign everyone out immediately, also change `SESSION_SECRET`.
+**Change a password.** In Vercel, edit `CLUB_PASSWORD` or `ADMIN_PASSWORD`, then redeploy. Everyone who signed in with the old password is signed out on their next click (each sign-in remembers which password made it). Turning the Test button off, or changing `TEST_LOGIN_ROLE`, signs out everyone who came in through it the same way. To sign out absolutely everyone, change `SESSION_SECRET`.
 
 **Download all the data.** Admin → Export all data → Download JSON. Do this before any big change, and a few times a year. Keep the file private.
 
@@ -82,7 +82,9 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 
 Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supabase. `CLAUDE.md` in the code folder is the full set of decisions and rules; read it first. Run it locally with `npm install` then `npm run dev`; check a change with `npx tsc --noEmit`, `npx eslint .` and `npm run build`.
 
-**Database changes.** All SQL is in `supabase/migrations/`, numbered. To change the database, write a new numbered file (never edit an old one), then paste it into the Supabase SQL editor (club project → SQL Editor) and run it. The first three are already part of the project: `0001_init.sql` (tables), `0002_save_game.sql` (the save function) and `0003_seed_club_teams_and_schedule.sql` (the club's teams, season and one schedule; safe to run twice). If you set up a new Supabase project, run them in order.
+**Database changes.** All SQL is in `supabase/migrations/`, numbered. To change the database, write a new numbered file (never edit an old one), then paste it into the Supabase SQL editor (club project → SQL Editor) and run it. They are: `0001_init.sql` (tables), `0002_save_game.sql` (the save function), `0003_seed_club_teams_and_schedule.sql` (the club's teams, season and one schedule; safe to run twice), `0004_game_analysis_lock.sql` (one person per game) and `0005_lock_public_api.sql` (takes all table access away from Supabase's public key, as a second lock behind row level security; safe to run twice). If you set up a new Supabase project, run them in order.
+
+**Tests.** `npm test` runs the automated tests (`tests/`): the club's formulas against its sample sheet, the scoreboard check, cleaning up the AI's replies, the number check on AI text, sign-in cookies, the page and API gate, and what a save may contain. `npm run check` runs the type checker, the linter and the tests together. Run it before every push to `main`.
 
 **Add a sport, or a level, to the team list.** Edit `lib/teams/options.ts` (add one line to `SPORTS`, or to `LEVELS` for something like JV2). The current levels are Varsity, JV, JV2 and JHS. Every dropdown and check reads that file, and no database change is needed. The new sport gets teams and schedules; its Analyze tab says "Stats for this sport aren't set up yet" until it has stats.
 
@@ -102,7 +104,7 @@ Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supa
 - **Gemini:** the video analysis, the schedule-picture reader and the Season summary have never completed a run against the real Gemini API. Three setup problems were found and fixed along the way (file addresses, API version `v1beta`, and clearer error messages), so the next real run is the real test.
 - **Vercel Blob** (the temporary video hand-off) has not been proven with a large real video.
 - **Test button:** until the real passwords are set, anyone with the website address can sign in as the role in `TEST_LOGIN_ROLE`. Set `CLUB_PASSWORD` and `ADMIN_PASSWORD`, then set `ALLOW_TEST_LOGIN=false`, delete `TEST_LOGIN_ROLE`, and redeploy.
-- Two people can analyze the same game at the same time (there is no lock). Saving over an already analyzed game asks for confirmation.
+- One person per game is enforced by a 30-minute claim (migration 0004). Saving over an already analyzed game asks for confirmation.
 - Stored data never expires automatically; an admin deletes games by hand.
 - The Roslyn-only video check (the AI must see "Roslyn" on screen) has not been tried on real game footage and may wrongly reject some games.
 - Lacrosse efficiency formulas, a few stat definitions, and the open questions in `CLAUDE.md` section 18 still need the club's answers.

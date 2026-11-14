@@ -77,7 +77,9 @@ export const saveBody = z
     starters: z.array(jersey).max(12),
     log: z.object({ possessions: z.array(possession).max(600), scoreboard: z.array(reading).max(400) }),
   })
-  .refine((b) => Boolean(b.game_id) !== Boolean(b.quick), { message: "Choose a game or add one." });
+  .refine((b) => Boolean(b.game_id) !== Boolean(b.quick), { message: "Choose a game or add one." })
+  // Editing a saved game skips the Roslyn-game check, so it may only ever touch an existing game, never create one.
+  .refine((b) => !b.reopen || (Boolean(b.game_id) && !b.quick), { message: "Only a game that was already saved can be edited." });
 
 export type SaveBody = z.infer<typeof saveBody>;
 

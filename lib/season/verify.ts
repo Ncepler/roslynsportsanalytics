@@ -21,7 +21,24 @@ export function allowedNumbers(data: unknown): number[] {
 }
 
 /** Number words that aren't data: "3-pointers", "Q3", "2-point", "M / Z / F" etc. */
-const NON_DATA = [/\bper 100\b/gi, /\b[123]-?(?:point(?:er)?s?|pt|pts)\b/gi, /\b(?:q|quarter )[1-4]\b/gi, /\bthree(?:-point(?:er)?s?)?\b/gi, /\b\d+(?:st|nd|rd|th)\b/gi, /\bp[1-3]\b/gi, /\bperiod [1-3]\b/gi];
+const NON_DATA = [/\bper 100\b/gi, /\b[123]-?(?:point(?:er)?s?|pt|pts)\b/gi, /\b(?:two|three)[-\s]point(?:er)?s?\b/gi, /\bthree[-\s]?(?:pt|pts)\b/gi, /\b(?:q|quarter )[1-4]\b/gi, /\b\d+(?:st|nd|rd|th)\b/gi, /\bp[1-3]\b/gi, /\bperiod [1-3]\b/gi];
+
+// Spelled-out numbers are checked too, so "twelve turnovers" can't slip past the digit check. "one" is left out
+// on purpose ("one of the", "one more"); every other count word is turned into digits before checking.
+const NUMBER_WORDS: Record<string, number> = {
+  two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40,
+  fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, dozen: 12,
+};
+const TENS = /\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s](one|two|three|four|five|six|seven|eight|nine)\b/gi;
+const ONES: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
+const WORD = new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join("|")})\\b`, "gi");
+
+function wordsToDigits(text: string): string {
+  return text
+    .replace(TENS, (_, t: string, o: string) => String(NUMBER_WORDS[t.toLowerCase()] + ONES[o.toLowerCase()]))
+    .replace(WORD, (w) => String(NUMBER_WORDS[w.toLowerCase()]));
+}
 
 /** A written number matches a computed one if it equals it at the precision the writer used. */
 function matches(written: string, allowed: number[]): boolean {
@@ -40,6 +57,7 @@ export function verifyText(text: string, allowed: number[]): Verified {
   for (const sentence of sentences) {
     let scrubbed = sentence;
     for (const re of NON_DATA) scrubbed = scrubbed.replace(re, "");
+    scrubbed = wordsToDigits(scrubbed);
     const numbers = scrubbed.match(/-?\d+(?:\.\d+)?/g) ?? [];
     if (numbers.every((n) => matches(n, allowed))) kept.push(sentence);
     else removed.push(sentence);

@@ -5,6 +5,7 @@
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { LogEvent, Possession } from "@/lib/gemini/log-types";
 import { passesNeeded, type AppearanceResult, type GameSetup, type PossessionRef } from "@/lib/gemini/prompt";
+import { sanitizeEvents, sanitizeLog } from "@/lib/gemini/sanitize";
 import { getSport } from "@/lib/sports";
 import { api, ApiError, sleep, type GeminiFile } from "./api";
 import { mergeLogs, MAX_PARALLEL, type Range, type Segment } from "./segments";
@@ -151,11 +152,10 @@ export async function runPossessionLog(
       const r = await runOne("log", segments[i].watch, video, setup, signal);
       count(r);
       const parsed = parseJson<Partial<PossessionLog> & { playerNoteUpdates?: unknown }>(r.text);
-      const log: PossessionLog = {
-        possessions: Array.isArray(parsed.possessions) ? parsed.possessions.map((p) => ({ ...p, events: Array.isArray(p.events) ? p.events : [] })) : [],
-        scoreboard: Array.isArray(parsed.scoreboard) ? parsed.scoreboard : [],
-        warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
-      };
+      // Every value the AI sent is checked before any math runs (lib/gemini/sanitize.ts).
+      const log: PossessionLog = sport
+        ? sanitizeLog(parsed, sport, segments[i].watch)
+        : { possessions: [], scoreboard: [], warnings: ["This sport has no stat setup, so nothing was logged."] };
       const texts = [r.text];
       tick();
       if (later.length && log.possessions.length) {
@@ -165,7 +165,9 @@ export async function runPossessionLog(
           count(x);
           texts.push(x.text);
           const ev = parseJson<{ events?: unknown; warnings?: unknown }>(x.text);
-          attachEvents(log.possessions, Array.isArray(ev.events) ? ev.events : [], log.warnings);
+          const clean = sanitizeEvents(ev.events, sport!, segments[i].watch);
+          if (clean.dropped) log.warnings.push(`${clean.dropped} event${clean.dropped === 1 ? "" : "s"} from the AI couldn't be read and ${clean.dropped === 1 ? "was" : "were"} left out.`);
+          attachEvents(log.possessions, clean.events, log.warnings);
           if (Array.isArray(ev.warnings)) log.warnings.push(...ev.warnings.filter((w): w is string => typeof w === "string"));
           tick();
         }

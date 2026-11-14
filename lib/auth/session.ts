@@ -27,7 +27,45 @@ export function isRole(value: unknown): value is Role {
 export const canUseSite = (role: Role | null): boolean => role === "member" || role === "admin";
 export const isAdminRole = (role: Role | null): boolean => role === "admin";
 
-type SessionPayload = { exp: number; role: Role };
+// Each cookie carries a short fingerprint of what granted it: the password that was typed, or the Test button
+// setting. On every request the fingerprint must still match the current settings, so changing CLUB_PASSWORD or
+// ADMIN_PASSWORD logs out everyone who used the old one, and turning the Test button off (or changing
+// TEST_LOGIN_ROLE) logs out everyone who got in through it. Cookies without a fingerprint are rejected.
+type SessionPayload = { exp: number; role: Role; k: string };
+
+/** Test button role: whatever TEST_LOGIN_ROLE says (admin | member | demo), and demo if it is unset or invalid. */
+export function testLoginRole(): Role {
+  const wanted = process.env.TEST_LOGIN_ROLE;
+  return isRole(wanted) ? wanted : "demo";
+}
+
+export const testLoginEnabled = () => process.env.ALLOW_TEST_LOGIN === "true";
+
+export type SessionSource = { kind: "password"; password: string } | { kind: "test" };
+
+const fingerprintCache = new Map<string, Promise<string>>();
+
+function fingerprint(role: Role, source: SessionSource): Promise<string> {
+  const input = source.kind === "test" ? `test:${role}` : `pw:${role}:${source.password}`;
+  let fp = fingerprintCache.get(input);
+  if (!fp) {
+    fp = getKey()
+      .then((key) => crypto.subtle.sign("HMAC", key, encoder.encode(`fp.${input}`)))
+      .then((sig) => toBase64Url(new Uint8Array(sig)).slice(0, 22));
+    if (fingerprintCache.size > 20) fingerprintCache.clear();
+    fingerprintCache.set(input, fp);
+  }
+  return fp;
+}
+
+/** Fingerprints that are valid right now for this role, from the current env settings. */
+async function currentFingerprints(role: Role): Promise<string[]> {
+  const out: string[] = [];
+  const password = role === "admin" ? process.env.ADMIN_PASSWORD : role === "member" ? process.env.CLUB_PASSWORD : undefined;
+  if (password) out.push(await fingerprint(role, { kind: "password", password }));
+  if (testLoginEnabled() && testLoginRole() === role) out.push(await fingerprint(role, { kind: "test" }));
+  return out;
+}
 
 const encoder = new TextEncoder();
 
@@ -67,8 +105,8 @@ function getKey(): Promise<CryptoKey> {
   return keyPromise;
 }
 
-export async function createSessionToken(role: Role): Promise<string> {
-  const payload: SessionPayload = { exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS, role };
+export async function createSessionToken(role: Role, source: SessionSource): Promise<string> {
+  const payload: SessionPayload = { exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS, role, k: await fingerprint(role, source) };
   const body = toBase64Url(encoder.encode(JSON.stringify(payload)));
   const signature = await crypto.subtle.sign("HMAC", await getKey(), encoder.encode(body));
   return `${body}.${toBase64Url(new Uint8Array(signature))}`;
@@ -92,7 +130,9 @@ export async function verifySessionToken(token: string | undefined): Promise<Rol
   try {
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as Partial<SessionPayload>;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now() / 1000) return null;
-    return isRole(payload.role) ? payload.role : null;
+    if (!isRole(payload.role) || typeof payload.k !== "string") return null;
+    // Still granted by the current password or Test setting? (Both are fixed-length HMAC prefixes.)
+    return (await currentFingerprints(payload.role)).includes(payload.k) ? payload.role : null;
   } catch {
     return null;
   }
