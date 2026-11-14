@@ -4,6 +4,7 @@ import { GoogleGenAI, PartMediaResolutionLevel } from "@google/genai";
 import type { PossessionLog } from "./log-types";
 
 export const GEMINI_HOST = "https://generativelanguage.googleapis.com";
+export const GEMINI_API_VERSION = "v1beta";
 
 export type Resolution = "low" | "high";
 
@@ -17,7 +18,9 @@ export class GeminiConfigError extends Error {}
 
 let client: GoogleGenAI | null = null;
 export function gemini(): GoogleGenAI {
-  client ??= new GoogleGenAI({ apiKey: apiKey() });
+  // v1beta on purpose: the SDK's newer default (v1) rejects the input parts this app sends ("'text' is not supported for
+  // 'input[1].type' in v1, it is available in v1beta"). The key goes in the x-goog-api-key header (the SDK does this).
+  client ??= new GoogleGenAI({ apiKey: apiKey(), httpOptions: { apiVersion: GEMINI_API_VERSION } });
   return client;
 }
 
@@ -67,7 +70,7 @@ export async function diagnoseGemini(err: unknown): Promise<GeminiDiagnosis> {
   let google = googleErrorOf(err);
   if (!google) {
     try {
-      const res = await fetch(`${GEMINI_HOST}/v1beta/models/${encodeURIComponent(model)}`, { headers: { "x-goog-api-key": apiKey() } });
+      const res = await fetch(`${GEMINI_HOST}/${GEMINI_API_VERSION}/models/${encodeURIComponent(model)}`, { headers: { "x-goog-api-key": apiKey() } });
       if (res.ok) return { kind: "request", google: null }; // key and model are fine, so the request itself was refused
       google = parseGoogleBody(await res.text());
     } catch {
@@ -100,7 +103,7 @@ const seconds = (s: number) => `${Math.max(0, s).toFixed(1)}s`;
  * Vercel and the key never reaches the browser.
  */
 export async function startResumableUpload(opts: { size: number; mimeType: string; displayName: string }) {
-  const res = await fetch(`${GEMINI_HOST}/upload/v1beta/files`, {
+  const res = await fetch(`${GEMINI_HOST}/upload/${GEMINI_API_VERSION}/files`, {
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey(),
