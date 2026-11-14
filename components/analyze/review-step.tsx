@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { RunUsage } from "@/lib/client/run";
 import { formatTime } from "@/lib/client/time";
@@ -32,6 +33,8 @@ const INITIAL_ROWS = 5;
 const pct = (v: number | null) => (v === null ? "–" : `${(v * 100).toFixed(1)}%`);
 const num = (v: number | null, d = 2) => (v === null ? "–" : v.toFixed(d));
 
+type SaveProp = { saved: boolean; onSave: (sheets: Sheet[], opts: SaveOptions) => Promise<void>; scores: { roslyn: number | null; opponent: number | null }; reopened: boolean; scheduleHref: string };
+
 export function ReviewStep({
   log,
   onLog,
@@ -45,8 +48,8 @@ export function ReviewStep({
   save,
 }: {
   demo?: boolean;
-  /** Real flow only: saves the sheets to the club's schedule and locks the game. */
-  save?: { saved: boolean; onSave: (sheets: Sheet[]) => Promise<void> };
+  /** Real flow only: saves the reviewed log to the team's game. */
+  save?: SaveProp;
   playerNotes: { start: string; updates: string[] } | null;
   /** Roslyn starters' numbers, for plus/minus and minutes. */
   starters?: string[];
@@ -139,7 +142,7 @@ export function ReviewStep({
         </div>
       </section>
 
-      {save && <SaveGame sheets={sheets} flagged={flagged.length > 0} saved={save.saved} onSave={save.onSave} />}
+      {save && <SaveGame sheets={sheets} flagged={flagged.length > 0} save={save} />}
 
       <details className="text-sm">
         <summary className="cursor-pointer font-medium text-muted">Run details (raw AI output, tokens)</summary>
@@ -696,17 +699,24 @@ function SheetPreview({ sheet, fileStem }: { sheet: Sheet; fileStem: string }) {
   );
 }
 
-function SaveGame({ sheets, flagged, saved, onSave }: { sheets: Sheet[]; flagged: boolean; saved: boolean; onSave: (sheets: Sheet[]) => Promise<void> }) {
+/** Final score typed by a person (never filled in by the AI); blank means unknown. */
+export type SaveOptions = { roslyn: number | null; opponent: number | null };
+
+const toScore = (v: string): number | null => (v.trim() === "" || !/^\d{1,3}$/.test(v.trim()) ? null : Number(v.trim()));
+
+function SaveGame({ sheets, flagged, save }: { sheets: Sheet[]; flagged: boolean; save: SaveProp }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [roslyn, setRoslyn] = useState(save.scores.roslyn?.toString() ?? "");
+  const [opponent, setOpponent] = useState(save.scores.opponent?.toString() ?? "");
 
-  async function save() {
+  async function run() {
     const warning = flagged ? "Some quarters still fail the scoreboard check. " : "";
-    if (!window.confirm(`${warning}Save this game? Once saved it is locked, and only an admin can reopen it.`)) return;
+    if (!window.confirm(`${warning}${save.reopened ? "Save your changes? This replaces what was saved for this game." : "Save this game to the schedule?"}`)) return;
     setPending(true);
     setError(null);
     try {
-      await onSave(sheets);
+      await save.onSave(sheets, { roslyn: toScore(roslyn), opponent: toScore(opponent) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save the game. Try again.");
     }
@@ -716,15 +726,31 @@ function SaveGame({ sheets, flagged, saved, onSave }: { sheets: Sheet[]; flagged
   return (
     <section>
       <h2 className="text-xl font-semibold tracking-[-0.01em]">Save this game</h2>
-      {saved ? (
+      {save.saved ? (
         <p role="status" className="mt-2 font-medium">
-          Saved. This game is locked, so nobody needs to do it again.
+          Saved.{" "}
+          <Link href={save.scheduleHref} className="text-accent underline underline-offset-2">
+            Back to the schedule
+          </Link>
+          . You can open this game again from the Analyze tab to fix anything.
         </p>
       ) : (
         <>
-          <p className="hint mt-1 max-w-[38rem]">When the tables look right, save the game. That marks it done for the whole club and keeps the tables for Season trends. The video is never kept.</p>
-          <button type="button" className="btn btn-primary mt-3" disabled={pending} onClick={() => void save()}>
-            {pending ? "Saving…" : "Finish and save game"}
+          <p className="hint mt-1 max-w-[38rem]">
+            When the log looks right, save it. The tables are worked out from it whenever they are shown, and Season trends use it. The video and the player notes are never kept.
+          </p>
+          <fieldset className="mt-4">
+            <legend className="label">Final score (optional, type it only if you know it)</legend>
+            <div className="flex flex-wrap items-center gap-2">
+              <input aria-label="Roslyn final score" inputMode="numeric" className="field !w-24 tabular-nums" placeholder="Roslyn" value={roslyn} onChange={(e) => setRoslyn(e.target.value)} maxLength={3} />
+              <span aria-hidden className="text-muted">
+                to
+              </span>
+              <input aria-label="Opponent final score" inputMode="numeric" className="field !w-24 tabular-nums" placeholder="Them" value={opponent} onChange={(e) => setOpponent(e.target.value)} maxLength={3} />
+            </div>
+          </fieldset>
+          <button type="button" className="btn btn-primary mt-4" disabled={pending} onClick={() => void run()}>
+            {pending ? "Saving…" : save.reopened ? "Save changes" : "Save game"}
           </button>
           <p role="alert" className="mt-2 min-h-5 text-sm text-danger">
             {error}

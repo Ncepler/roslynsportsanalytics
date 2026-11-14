@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type GeminiFile } from "@/lib/client/api";
-import { finishGame, releaseGame, sendHeartbeat } from "@/lib/client/games";
-import { HEARTBEAT_MS, type GameSport, type PublicGame } from "@/lib/games/types";
+import { saveGameToTeam, type ReopenedGame } from "@/lib/client/save";
+import type { PickableGame } from "@/lib/db/games";
 import type { Sheet } from "@/lib/sheets";
 import { realBackend, type Backend } from "@/lib/client/backend";
 import type { Resolution } from "@/lib/client/run";
@@ -13,11 +13,11 @@ import type { GameSetup } from "@/lib/gemini/prompt";
 import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/gemini/pricing";
 import { passesNeeded } from "@/lib/gemini/prompt";
 import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
-import { GameStep } from "./game-step";
-import { ReviewStep } from "./review-step";
+import { ReviewStep, type SaveOptions } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
 import { StepIndicator, type StepIndex } from "./step-indicator";
+import { TeamGameStep, type TeamGameChoice } from "./team-game-step";
 import { TrimStep, type TrimState } from "./trim-step";
 import { UploadStep } from "./upload-step";
 
@@ -46,10 +46,20 @@ const basketballDefaults = (): GameSetup => ({
   statIds: defaultStatIds(SPORTS.basketball),
 });
 
-/** The game this person picked and holds. `token` is their secret for keeping, releasing and saving it. */
-type ChosenGame = { id: string; sport: GameSport; opponent: string; date: string | null; token: string };
+/** The team this Analyze tab belongs to, with its games (real flow only; the simulation and the owner test have none). */
+export type TeamContext = {
+  id: string;
+  slug: string;
+  sport: "basketball" | "lacrosse";
+  scheduled: PickableGame[];
+  analyzed: PickableGame[];
+  opponents: string[];
+};
 
-export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBackend?: () => Backend; demo?: boolean; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
+/** The game this person picked: a scheduled game (`id`), or one to be added on save (`id` null). */
+type ChosenGame = { id: string | null; opponent: string; date: string; homeAway: "home" | "away"; reopened: boolean; scores: { roslyn: number | null; opponent: number | null } };
+
+export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { makeBackend?: () => Backend; demo?: boolean; team?: TeamContext; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
   const testMode = Boolean(ownerToken);
   const [step, setStep] = useState<StepIndex>(0);
   const [reachable, setReachable] = useState<StepIndex>(0);
@@ -83,61 +93,39 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
 
   // ---------- the chosen game (real flow only; /test has no schedule) ----------
   const [game, setGame] = useState<ChosenGame | null>(null);
-  const [claimLost, setClaimLost] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const gameRef = useRef<{ game: ChosenGame | null; saved: boolean }>({ game: null, saved: false });
-  useEffect(() => {
-    gameRef.current = { game, saved };
-  }, [game, saved]);
 
-  function chooseGame(g: PublicGame, token: string) {
-    setGame({ id: g.id, sport: g.sport as GameSport, opponent: g.opponent, date: g.date, token });
-    setClaimLost(null);
+  function chooseGame(c: TeamGameChoice) {
+    if (!team) return;
+    setGame({ id: c.kind === "scheduled" ? c.id : null, opponent: c.opponent, date: c.date, homeAway: c.homeAway, reopened: false, scores: { roslyn: null, opponent: null } });
     setSaved(false);
-    // The sport and opponent come from the schedule, not from typing.
-    setSetup((cur) => ({ ...cur, sportId: g.sport, awayName: g.opponent, statIds: cur.sportId === g.sport ? cur.statIds : defaultStatIds(SPORTS[g.sport]) }));
+    // The sport comes from the team and the opponent from the game, not from typing.
+    setSetup((cur) => ({ ...cur, sportId: team.sport, awayName: c.opponent, statIds: cur.sportId === team.sport ? cur.statIds : defaultStatIds(SPORTS[team.sport]) }));
   }
 
-  // Keep the claim alive while this page is open, and re-check when a sleeping laptop wakes.
-  useEffect(() => {
-    if (!game || saved) return;
-    const { id, token } = game;
-    let stopped = false;
-    const beat = () =>
-      sendHeartbeat(id, token).catch((err) => {
-        if (err instanceof ApiError && err.status === 409 && !stopped) setClaimLost(err.message);
-      });
-    const timer = setInterval(beat, HEARTBEAT_MS);
-    const onVisible = () => document.visibilityState === "visible" && beat();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [game, saved]);
+  /** Opens an already saved game straight in the Review table (no video: nothing to upload or trim). */
+  function reopenGame(r: ReopenedGame) {
+    if (!team) return;
+    setGame({ id: r.game.id, opponent: r.game.opponent, date: r.game.date, homeAway: "home", reopened: true, scores: { roslyn: r.game.our_score, opponent: r.game.opp_score } });
+    setSaved(false);
+    setSetup({ ...basketballDefaults(), sportId: team.sport, awayName: r.game.opponent, statIds: r.statIds.length > 0 ? r.statIds : defaultStatIds(SPORTS[team.sport]) });
+    setStarterNumbers(r.starters);
+    setNotes(null);
+    setLog(r.log);
+    setRun({ phase: "idle" });
+    setReachable(4);
+    setStep(4);
+  }
 
-  // Free the game if the tab closes before it is saved.
-  useEffect(() => {
-    const onHide = () => {
-      const cur = gameRef.current;
-      if (cur.game && !cur.saved) void releaseGame(cur.game.id, cur.game.token);
-    };
-    window.addEventListener("pagehide", onHide);
-    return () => window.removeEventListener("pagehide", onHide);
-  }, []);
-
-  /** Gives the game back and starts over at the picker. */
+  /** Starts over at the game picker. */
   function changeGame() {
     runAbort.current?.abort();
     uploadAbort.current?.abort();
-    if (game && !saved) void releaseGame(game.id, game.token);
     if (geminiName.current) void backend.deleteFile(geminiName.current);
     geminiName.current = null;
     clearance.current = null;
     savedClearance.current = null;
     setGame(null);
-    setClaimLost(null);
     setSaved(false);
     setFile(null);
     setVideoUrl(null);
@@ -145,6 +133,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
     setUpload(null);
     setLog(null);
     setNotes(null);
+    setStarterNumbers([]);
     setRun({ phase: "idle" });
     setTrim({ range: { start: 0, end: 0 }, skips: [] });
     setSetup(basketballDefaults());
@@ -152,10 +141,30 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
     setStep(0);
   }
 
-  async function saveGame(sheets: Sheet[]) {
-    if (!game) return;
-    if (!savedClearance.current) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
-    await finishGame(game.id, game.token, { clearance: savedClearance.current, statIds: setup.statIds, sheets: sheets.map(({ id, title, header, rows }) => ({ id, title, header, rows })) });
+  async function saveGame(_sheets: Sheet[], opts: SaveOptions) {
+    if (!game || !team || !log) return;
+    if (!game.reopened && !savedClearance.current) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
+    const payload = {
+      team_id: team.id,
+      ...(game.id ? { game_id: game.id } : { quick: { opponent_name: game.opponent, game_date: game.date, home_away: game.homeAway } }),
+      reopen: game.reopened || undefined,
+      clearance: game.reopened ? undefined : (savedClearance.current ?? undefined),
+      source_filename: file?.name ?? null,
+      our_score: opts.roslyn,
+      opp_score: opts.opponent,
+      stat_ids: setup.statIds,
+      starters: starterNumbers,
+      log: { possessions: log.possessions, scoreboard: log.scoreboard },
+    };
+    try {
+      await saveGameToTeam(payload);
+    } catch (err) {
+      // Someone saved this game while it was being reviewed (or this is an edit): replacing needs an explicit yes.
+      if (err instanceof ApiError && err.code === "needs_confirm") {
+        if (!window.confirm(`${err.message} Saving again replaces what was saved.`)) throw new Error("Not saved.");
+        await saveGameToTeam({ ...payload, confirm_replace: true });
+      } else throw err;
+    }
     setSaved(true);
   }
 
@@ -303,10 +312,6 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
 
   // ---------- run ----------
   async function analyze() {
-    if (claimLost) {
-      setRun({ phase: "error", message: claimLost });
-      return;
-    }
     runAbort.current?.abort();
     const ctrl = new AbortController();
     runAbort.current = ctrl;
@@ -411,21 +416,14 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
       {game && (
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="font-medium">
-            {game.sport === "lacrosse" ? "Lacrosse" : "Basketball"} vs. {game.opponent}
+            {team?.sport === "lacrosse" ? "Lacrosse" : "Basketball"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
           </span>
           {!saved && (
             <button type="button" className="btn btn-ghost min-h-9 px-2 text-sm" onClick={changeGame}>
               Choose a different game
             </button>
           )}
-        </div>
-      )}
-      {claimLost && !saved && (
-        <div role="alert" className="mt-4 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
-          {claimLost}{" "}
-          <button type="button" className="underline" onClick={changeGame}>
-            Pick a game
-          </button>
+          {game.reopened && <span className="text-muted">Editing a saved game. There is no video here, so clicking a row can&apos;t jump to the footage.</span>}
         </div>
       )}
 
@@ -465,7 +463,12 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
       )}
 
       <div className={step === 1 ? "mt-4" : "mt-8"}>
-        {step === 0 && (demo || testMode || game ? <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} /> : <GameStep onChosen={chooseGame} />)}
+        {step === 0 &&
+          (demo || testMode || game ? (
+            <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} />
+          ) : team ? (
+            <TeamGameStep scheduled={team.scheduled} analyzed={team.analyzed} opponents={team.opponents} onChoose={chooseGame} onReopen={reopenGame} />
+          ) : null)}
         {step === 1 && (
           <>
             <TrimStep
@@ -526,7 +529,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken }: { makeBac
                 Simulated results. These numbers were randomly generated to show how review works. Don&apos;t copy them into the club&apos;s sheets.
               </p>
             )}
-            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game ? { saved, onSave: saveGame } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
+            <ReviewStep log={log} onLog={setLog} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game && team ? { saved, onSave: saveGame, scores: game.scores, reopened: game.reopened, scheduleHref: `/t/${team.slug}` } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}
       </div>

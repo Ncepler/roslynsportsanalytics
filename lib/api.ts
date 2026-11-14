@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { SESSION_COOKIE, canUseSite, isAdminRole, verifySessionToken } from "@/lib/auth/session";
 import { DbError } from "@/lib/db/errors";
-import { GameError } from "@/lib/games/errors";
 import { GeminiConfigError } from "@/lib/gemini/client";
 
 // Shared wrapper for the Gemini API routes: rate limit plus uniform JSON
@@ -42,8 +41,7 @@ async function guardedInner(request: Request, handler: () => Promise<Response>):
   try {
     return await handler();
   } catch (err) {
-    if (err instanceof DbError) return jsonError(err.status, err.message);
-    if (err instanceof GameError) return jsonError(err.status, err.message);
+    if (err instanceof DbError) return NextResponse.json(err.code ? { error: err.message, code: err.code } : { error: err.message }, { status: err.status });
     if (err instanceof GeminiConfigError) return jsonError(503, "Gemini isn't set up yet (missing API key).");
     const status = (err as { status?: number }).status;
     if (status === 402) return jsonError(402, "Gemini credits are used up. Add credits in Google AI Studio.");

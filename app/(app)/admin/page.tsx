@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { ClubAdmin } from "@/components/admin/club-admin";
 import { OwnerTest } from "@/components/admin/owner-test";
-import { ScheduleAdmin } from "@/components/admin/schedule-admin";
 
 export const metadata: Metadata = { title: "Admin · Roslyn Film Analyzer" };
 
@@ -14,13 +13,6 @@ export default function AdminPage() {
       <div className="mt-8">
         <ClubAdmin />
       </div>
-      {/* Temporary: the old schedule that the current Analyze picker still reads. Replaced in Stage 5. */}
-      <details className="mt-12 border-t border-border pt-6">
-        <summary className="cursor-pointer text-sm font-medium text-muted">Old game picker schedule (until the Save flow replaces it)</summary>
-        <div className="mt-6">
-          <ScheduleAdmin />
-        </div>
-      </details>
       <OwnerTest />
     </section>
   );

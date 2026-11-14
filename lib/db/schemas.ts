@@ -6,7 +6,7 @@ import { DbError } from "./errors";
 
 const oneOf = (name: string) => `Choose a valid ${name}.`
 
-const isoDate = z
+export const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-12-05.")
   .refine((v) => {

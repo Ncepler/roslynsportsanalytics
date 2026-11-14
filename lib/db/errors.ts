@@ -3,6 +3,8 @@ export class DbError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Optional machine-readable reason the browser can act on (e.g. "needs_confirm"). */
+    public code?: string,
   ) {
     super(message);
   }

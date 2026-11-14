@@ -6,6 +6,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message);
   }
@@ -30,7 +31,7 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
     window.location.href = "/login";
     throw new ApiError("Your session ended. Log in again.", 401);
   }
-  if (!res.ok || !data) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status);
+  if (!res.ok || !data) throw new ApiError(data?.error ?? `Request failed (${res.status}).`, res.status, (data as { code?: string } | null)?.code);
   return data;
 }
 
