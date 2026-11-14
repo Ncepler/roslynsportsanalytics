@@ -236,6 +236,46 @@
     color: var(--text-muted);
   }
 
+  /* Left drawer (CLAUDE.md section 19). transform + opacity only; durations are zeroed under prefers-reduced-motion.
+     visibility flips after the exit so a closed drawer is never focusable. */
+  .drawer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: oklch(0 0 0 / 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      visibility 0s linear var(--duration-base);
+  }
+  .drawer {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    width: min(20rem, 86vw);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform var(--duration-base) var(--ease-drawer),
+      visibility 0s linear var(--duration-base);
+  }
+  .drawer-root[data-open="true"] .drawer-scrim {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+  }
+  .drawer-root[data-open="true"] .drawer {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
   @media (hover: hover) and (pointer: fine) {
     .btn-primary:hover:not(:disabled) {
       background: var(--accent-hover);

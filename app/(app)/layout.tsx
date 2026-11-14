@@ -1,7 +1,27 @@
+import Link from "next/link";
 import { Suspense } from "react";
-import { AdminLink } from "@/components/admin-link";
 import { LogoutButton } from "@/components/logout-button";
+import { AppNav } from "@/components/nav/app-nav";
 import { NavTabs } from "@/components/nav-tabs";
+import { getRole } from "@/lib/auth/server";
+import { listActiveTeams, tryDb } from "@/lib/db/read";
+
+// The drawer's team list. Demo users never read the database (they only see the /test simulation).
+async function Nav() {
+  const role = await getRole();
+  if (role !== "member" && role !== "admin") return <AppNav teams={[]} isAdmin={false} drawer={false} />;
+  const result = await tryDb(listActiveTeams);
+  return <AppNav teams={result.ok ? result.data : []} isAdmin={role === "admin"} drawer />;
+}
+
+// Shown while the nav loads. Plain on purpose: usePathname() needs a Suspense boundary on dynamic routes.
+function TitleOnly() {
+  return (
+    <Link href="/" className="shrink-0 text-[0.9375rem] font-semibold tracking-[-0.01em]">
+      Roslyn Film Analyzer
+    </Link>
+  );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const freeTier = process.env.GEMINI_TIER === "free";
@@ -9,11 +29,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="sticky top-0 z-10 border-b border-border bg-[var(--header-bg)] backdrop-blur-[var(--header-blur)] backdrop-saturate-150">
-        <div className="mx-auto flex max-w-5xl items-center gap-2 px-2 sm:gap-4 sm:px-6">
-          <span className="hidden text-[0.9375rem] font-semibold tracking-[-0.01em] sm:block">Roslyn Film Analyzer</span>
-          <NavTabs />
-          <Suspense fallback={null}>
-            <AdminLink />
+        <div className="mx-auto flex min-h-14 max-w-5xl items-center gap-2 px-2 sm:gap-3 sm:px-6">
+          <Suspense fallback={<TitleOnly />}>
+            <Nav />
+          </Suspense>
+          <Suspense fallback={<div className="flex-1" />}>
+            <NavTabs />
           </Suspense>
           <LogoutButton />
         </div>
