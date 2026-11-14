@@ -40,7 +40,7 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | Name | What it is | Where to get it |
 |---|---|---|
 | `SUPABASE_URL` | Address of the database | Supabase → Project Settings → API → Project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Key that lets the website read and write the database. **Very powerful; never share it.** | Same page, "service_role" |
+| `SUPABASE_SERVICE_ROLE_KEY` | The database key the website uses. **Paste Supabase's "Secret" key here** (newer projects show only a Publishable and a Secret key; the Publishable one is not used and must not go here). Very powerful; never share it. | Supabase → Project Settings → API Keys → Secret |
 | `CLUB_PASSWORD` | The member password | You choose it |
 | `ADMIN_PASSWORD` | The admin password (must differ from the club password) | You choose it |
 | `SESSION_SECRET` | Random text that makes sign-ins tamper-proof (32+ characters) | Any password generator, or `openssl rand -base64 32` |
