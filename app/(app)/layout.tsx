@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { LogoutButton } from "@/components/logout-button";
 import { AppNav } from "@/components/nav/app-nav";
+import { Breadcrumbs } from "@/components/nav/breadcrumbs";
 import { NavTabs } from "@/components/nav-tabs";
 import { getRole } from "@/lib/auth/server";
 import { listActiveTeams, tryDb } from "@/lib/db/read";
@@ -46,7 +47,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </p>
         </div>
       )}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6 sm:py-14">{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+        <Suspense fallback={<div className="mb-6 h-5 sm:mb-8" />}>
+          <Breadcrumbs />
+        </Suspense>
+        {children}
+      </main>
     </>
   );
 }

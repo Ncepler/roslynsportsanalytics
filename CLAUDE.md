@@ -288,7 +288,7 @@ Follow the `apple-design`, `emil-kowalski-master` (design engineering and animat
 
 **Structure and simplicity (Apple's principles):**
 - Show the common path first: upload → sport → teams → Analyze. Put advanced options one level deeper (Experimental stats are collapsed).
-- Wayfinding on every screen: where am I (two top tabs plus a step indicator in setup), what can I do next, how do I go back. Never trap the user.
+- Wayfinding on every screen: where am I (**breadcrumbs at the top of every page**, `components/nav/breadcrumbs.tsx`, Nov 14: Home > Team > Schedule / Analyze a game / Season trends; Home > Admin; Home > Data & privacy; Practice demo > ... on `/test`; plus the team tabs and a step indicator in setup), what can I do next, how do I go back. Never trap the user. A new page must add its crumbs to `crumbsFor()`.
 - Direct, specific labels ("Analyze game," "Copy for Google Sheets"), not vague ones. Place each control next to what it affects.
 - Feedback in four kinds: status (the stage list), completion, warning (scoreboard mismatch, free-tier banner), error. Validate inline.
 - Forgiveness: easy to fix any AI mistake in the review table. Confirm only before genuinely irreversible or costly actions (the cost confirm).
