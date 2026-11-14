@@ -21,7 +21,8 @@ export function dbFail(
   // Setup problems get a message that says what to fix (nothing from the database itself is shown).
   const code = error.code ?? "";
   const text = (error.message ?? "").toLowerCase();
-  console.error("Database error:", code || (text.includes("fetch failed") ? "fetch-failed" : "unknown"));
+  // The code, or a short piece of the message when there is no code (so a problem can be told apart in the logs). No data values.
+  console.error("Database error:", code || (text.includes("fetch failed") ? "fetch-failed" : `no-code: ${(error.message ?? "unknown").slice(0, 90)}`));
   if (code === "PGRST125" || code === "PGRST126") {
     throw new DbError(503, "The database address looks wrong. In Vercel, SUPABASE_URL should be just the project URL, like https://abcdefghijklmnopqrst.supabase.co.");
   }

@@ -19,13 +19,24 @@ export type VideoRange = {
 
 type Raw = Record<string, unknown> | null;
 
+/**
+ * An uploaded file's address must be Google's own host plus /<api version>/files/<id>. Any API version is fine
+ * (the Gemini library moves between v1 and v1beta; requiring one exact version rejected every good upload), but
+ * the host and a plain file id are still exact, so a request can't point the server at some other address.
+ */
+export function isGeminiFileUri(uri: unknown): uri is string {
+  if (typeof uri !== "string" || uri.length > 300) return false;
+  const host = GEMINI_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${host}/v[0-9]+[a-z0-9]*/files/[A-Za-z0-9-]{1,64}$`).test(uri);
+}
+
 const MAX_TEXT = 200;
 const text = (v: unknown, max = MAX_TEXT) => (typeof v === "string" ? v.slice(0, max) : "");
 
 export function parseVideoRange(body: Raw): VideoRange | string {
   if (!body) return "Invalid request.";
   const { uri, mimeType, start, end, resolution, fps } = body;
-  if (typeof uri !== "string" || !uri.startsWith(`${GEMINI_HOST}/v1beta/files/`)) return "Invalid file.";
+  if (!isGeminiFileUri(uri)) return "Invalid file.";
   if (typeof mimeType !== "string" || !mimeType.startsWith("video/")) return "Invalid video type.";
   if (!isNum(start) || !isNum(end) || start < 0 || end <= start) return "Invalid start or end time.";
   if (end - start > MAX_RUN_SECONDS) return "That's over the 2-hour limit for one run. Trim it shorter.";
