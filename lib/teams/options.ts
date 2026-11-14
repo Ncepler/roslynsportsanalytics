@@ -10,6 +10,8 @@ export const GENDERS = [
 export const LEVELS = [
   { value: "varsity", label: "Varsity" },
   { value: "jv", label: "JV" },
+  { value: "jv2", label: "JV2" },
+  { value: "jhs", label: "JHS" },
 ] as const;
 
 // Edit this list freely. Values are lowercase, letters and hyphens only.
@@ -19,6 +21,7 @@ export const SPORTS = [
   { value: "volleyball", label: "Volleyball" },
   { value: "soccer", label: "Soccer" },
   { value: "football", label: "Football" },
+  { value: "flag-football", label: "Flag Football" },
   { value: "baseball", label: "Baseball" },
   { value: "softball", label: "Softball" },
   { value: "tennis", label: "Tennis" },
@@ -26,6 +29,7 @@ export const SPORTS = [
   { value: "cross-country", label: "Cross Country" },
   { value: "swimming", label: "Swimming" },
   { value: "wrestling", label: "Wrestling" },
+  { value: "water-polo", label: "Water Polo" },
   { value: "field-hockey", label: "Field Hockey" },
   { value: "ice-hockey", label: "Ice Hockey" },
   { value: "golf", label: "Golf" },

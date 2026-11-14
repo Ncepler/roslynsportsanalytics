@@ -9,6 +9,7 @@ import { GENDERS, LEVELS, SPORTS } from "@/lib/teams/options";
 // (no trip to another page). "Add the usual teams" creates the boys and girls, varsity and JV teams for the two
 // sports that have stats; anything extra can be archived on the Admin page.
 const USUAL = ["basketball", "lacrosse"] as const;
+const USUAL_LEVELS = ["varsity", "jv"] as const;
 
 export function FirstTeams() {
   const router = useRouter();
@@ -35,9 +36,10 @@ export function FirstTeams() {
     setBusy("usual");
     setError(null);
     try {
-      for (const s of USUAL) for (const g of GENDERS) for (const l of LEVELS) {
+      for (const s of USUAL) for (const g of GENDERS) for (const l of USUAL_LEVELS) {
+        // (varsity and JV only; JV2 and JHS teams are added one at a time)
         try {
-          await api("/api/admin/teams", { body: { gender: g.value, level: l.value, sport: s } });
+          await api("/api/admin/teams", { body: { gender: g.value, level: l, sport: s } });
         } catch (err) {
           if (!(err instanceof ApiError && err.status === 409)) throw err; // already exists: fine
         }
