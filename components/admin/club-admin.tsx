@@ -27,9 +27,9 @@ function Problem({ text }: { text: string | null }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
-    <label className="block min-w-0 flex-1 basis-40">
+    <label className={`block min-w-0 flex-1 ${wide ? "basis-full sm:basis-64" : "basis-40"}`}>
       <span className="label">{label}</span>
       {children}
     </label>
@@ -394,7 +394,7 @@ function ScheduleSection({
   return (
     <>
       <div className="flex flex-wrap gap-3">
-        <Field label="Team">
+        <Field label="Team" wide>
           <select className="field" value={effectiveTeam} onChange={(e) => { setTeamId(e.target.value); resetForm(); }}>
             {activeTeams.map((t) => (
               <option key={t.id} value={t.id}>
