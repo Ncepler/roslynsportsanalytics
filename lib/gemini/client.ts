@@ -25,38 +25,71 @@ export function geminiModel(): string {
   return process.env.GEMINI_MODEL || "gemini-3.8-flash";
 }
 
-export type GeminiDiagnosis = { kind: "key" } | { kind: "model"; model: string; available: string[] } | { kind: "request"; detail: string } | { kind: "unknown" };
+/** What Google itself said in an error reply (its JSON body: error.code, error.status, error.message, details[].reason). */
+export type GoogleError = { code?: number; status?: string; message?: string; reason?: string };
+
+const asText = (v: unknown) => (typeof v === "string" ? v : "");
+
+function parseGoogleBody(raw: unknown): GoogleError | null {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  const first = Array.isArray(value) ? value[0] : value; // Google sometimes wraps the error in an array
+  const e = (first as { error?: { code?: number; status?: string; message?: string; details?: { reason?: string }[] } } | null)?.error;
+  if (!e || typeof e !== "object") return null;
+  return { code: e.code, status: asText(e.status) || undefined, message: asText(e.message).replace(/\s+/g, " ").slice(0, 300) || undefined, reason: e.details?.find((d) => d?.reason)?.reason };
+}
+
+/** Google's own error text from a caught SDK error (the SDK keeps the raw JSON reply in `body`). */
+export function googleErrorOf(err: unknown): GoogleError | null {
+  const e = err as { body?: unknown; cause?: { body?: unknown } } | null;
+  return parseGoogleBody(e?.body) ?? parseGoogleBody(e?.cause?.body);
+}
+
+export type GeminiDiagnosis =
+  | { kind: "key"; google: GoogleError | null }
+  | { kind: "model"; model: string; available: string[]; google: GoogleError | null }
+  | { kind: "request"; google: GoogleError | null }
+  | { kind: "unknown"; google: GoogleError | null };
 
 /**
- * Gemini's newer API answers a bad key, a wrong model name and a malformed request with the same opaque 400, so the
- * site asks Google two tiny questions to tell them apart: is the model there for this key? Never returns the key.
+ * Says what a Gemini 400/401/403 means, from Google's own reply (never from the key's prefix or length). The key
+ * always goes in the x-goog-api-key header (the SDK does this; a key in a URL fails). If the caught error didn't carry
+ * Google's body, one small direct call to the model's page (header auth) fetches it.
  */
 export async function diagnoseGemini(err: unknown): Promise<GeminiDiagnosis> {
   const model = geminiModel();
-  try {
-    await gemini().models.get({ model });
-    // The key works and the model exists: the request itself was refused.
-    const detail = (err instanceof Error ? err.message : "").replace(/\s+/g, " ").slice(0, 160);
-    return { kind: "request", detail };
-  } catch (e) {
-    const status = (e as { status?: number }).status;
-    const text = e instanceof Error ? e.message : "";
-    if (/api[_ ]key|API_KEY_INVALID/i.test(text) || status === 401 || status === 403) return { kind: "key" };
-    if (status === 404 || /not found|not supported/i.test(text)) {
-      let available: string[] = [];
-      try {
-        for await (const m of await gemini().models.list()) {
-          const name = (m.name ?? "").replace("models/", "");
-          if (/^gemini-.*(flash|pro)/.test(name) && !/(image|tts|embedding|live|audio|vision)/.test(name)) available.push(name);
-          if (available.length >= 8) break;
-        }
-      } catch {
-        available = [];
-      }
-      return { kind: "model", model, available };
+  let google = googleErrorOf(err);
+  if (!google) {
+    try {
+      const res = await fetch(`${GEMINI_HOST}/v1beta/models/${encodeURIComponent(model)}`, { headers: { "x-goog-api-key": apiKey() } });
+      if (res.ok) return { kind: "request", google: null }; // key and model are fine, so the request itself was refused
+      google = parseGoogleBody(await res.text());
+    } catch {
+      return { kind: "unknown", google: null };
     }
-    return { kind: "unknown" };
   }
+  const text = `${google?.message ?? ""} ${google?.reason ?? ""}`;
+  if (google?.reason === "API_KEY_INVALID" || /api key/i.test(text) || google?.status === "UNAUTHENTICATED" || google?.status === "PERMISSION_DENIED") return { kind: "key", google };
+  if (google?.status === "NOT_FOUND" || google?.code === 404) {
+    const available: string[] = [];
+    try {
+      for await (const m of await gemini().models.list()) {
+        const name = (m.name ?? "").replace("models/", "");
+        if (/^gemini-.*(flash|pro)/.test(name) && !/(image|tts|embedding|live|audio|vision)/.test(name)) available.push(name);
+        if (available.length >= 8) break;
+      }
+    } catch {
+      // the list is only a hint
+    }
+    return { kind: "model", model, available, google };
+  }
+  return { kind: "request", google };
 }
 
 const seconds = (s: number) => `${Math.max(0, s).toFixed(1)}s`;

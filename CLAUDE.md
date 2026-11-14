@@ -227,6 +227,8 @@ The school's footage is on its Hudl fan account (`fan.hudl.com`, Roslyn High Sch
 
 ## 16. Gemini facts (checked Nov 2026; recheck before hardcoding)
 
+**API keys (Noah, Nov 14):** Google retired the old 39-character `AIza` keys in September 2026; AI Studio now issues only `AQ.` Authentication Keys. **Never validate or describe a key by its prefix or length.** The key always goes in the `x-goog-api-key` HTTP header (never in a URL query string, never to an OpenAI-compatible `/openai` endpoint, never with the deprecated `@google/generative-ai` SDK); the official `@google/genai` SDK does this, and the one direct upload call in `lib/gemini/client.ts` also uses the header. On a 400/401/403 the site shows what Google itself said (`error.message` and `error.status`, kept in the SDK error's `body`; `diagnoseGemini()` in `lib/gemini/client.ts`) and tells apart a bad key (`API_KEY_INVALID`), an unknown model (`NOT_FOUND`) and a refused request.
+
 Verified from Google's docs (`ai.google.dev/gemini-api/docs/video-understanding`, updated Oct 2026):
 - Input options: Files API (up to 20 GB paid / 2 GB free per Google's table; third-party sites say 2 GB per file, so treat 2 GB as the safe number until tested), Cloud Storage registration (2 GB per file), inline (under 100 MB), YouTube URLs.
 - Files auto-delete after 48 hours.
