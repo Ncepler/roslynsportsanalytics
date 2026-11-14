@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   return adminGuarded(request, async () => {
     if (!allowAttempt(`schedule-read:${clientIp(request)}`, 8)) return jsonError(429, "Too many tries. Wait a minute and try again.");
     const raw = await request.text();
-    if (raw.length > MAX_BODY_CHARS) return jsonError(413, "Those pictures are too big. Use smaller screenshots.");
+    if (raw.length > MAX_BODY_CHARS) return jsonError(413, "Those pictures are too big. Use smaller pictures.");
     let body: unknown;
     try {
       body = JSON.parse(raw);
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       const { rows, merged, cut } = toDraftRows(text, season);
       return NextResponse.json({ rows, merged, cut });
     } catch {
-      return jsonError(502, "The AI couldn't read a schedule from those pictures. Try a clearer screenshot, or type the games in.");
+      return jsonError(502, "The AI couldn't read a schedule from those pictures. Try clearer pictures, or type the games in.");
     }
   });
 }

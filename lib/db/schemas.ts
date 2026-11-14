@@ -71,6 +71,9 @@ export const gamePatch = z
 
 export const idParam = uuid;
 
+/** Body of the claim and release routes: a random per-tab token (a UUID), never a name. */
+export const claimBody = z.object({ token: z.string().uuid("Invalid token.") }).strict();
+
 /** Validates untrusted input. Throws a 400 DbError with the first problem in plain words. */
 export function parse<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data ?? undefined);
@@ -106,12 +109,19 @@ export const importBody = z
   .strict();
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const readTextBody = z
+  .object({
+    season_id: uuid,
+    text: z.string().trim().min(5, "Paste the schedule first.").max(20_000, "That's too much text. Paste up to about 60 games at a time."),
+  })
+  .strict();
+
 export const readBody = z
   .object({
     season_id: uuid,
     images: z
       .array(z.object({ mediaType: z.enum(IMAGE_TYPES, { message: "Use PNG, JPG or WebP pictures." }), data: z.string().min(100).max(2_200_000) }).strict())
-      .min(1, "Add at least one screenshot.")
-      .max(3, "Add up to 3 screenshots."),
+      .min(1, "Add at least one picture.")
+      .max(3, "Add up to 3 pictures."),
   })
   .strict();

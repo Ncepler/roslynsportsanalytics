@@ -25,6 +25,7 @@ export const basketball: SportConfig = {
       events: ["shot"],
       sheets: ["offense-summary", "possession-log", "roslyn-offense"],
       defaultOn: true,
+      required: true,
     },
     {
       id: "context",
@@ -36,6 +37,7 @@ export const basketball: SportConfig = {
         "For each possession, the defense faced: M = man-to-man, Z = zone, F = fast break (attack before the defense is set). Use null if you cannot tell.",
       sheets: ["offense-summary", "roslyn-offense"],
       defaultOn: true,
+      required: true,
     },
     {
       id: "turnovers",
@@ -47,6 +49,7 @@ export const basketball: SportConfig = {
       events: ["turnover"],
       sheets: ["offense-summary", "possession-log"],
       defaultOn: true,
+      required: true,
     },
     {
       id: "fouls",
@@ -98,6 +101,7 @@ export const basketball: SportConfig = {
       description: "Who secures each missed shot: offensive (shooting team keeps it) or defensive.",
       events: ["rebound"],
       sheets: ["offense-summary", "possession-log", "roslyn-offense"],
+      required: true,
       defaultOn: true,
     },
     { id: "assists",

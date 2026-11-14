@@ -20,12 +20,15 @@ export function TeamGameStep({
   opponents,
   onChoose,
   onReopen,
+  claimError,
 }: {
   scheduled: PickableGame[];
   analyzed: PickableGame[];
   opponents: string[];
-  onChoose: (choice: TeamGameChoice) => void;
+  onChoose: (choice: TeamGameChoice) => void | Promise<void>;
   onReopen: (game: ReopenedGame) => void;
+  /** Why the last pick was refused (someone else is analyzing that game). */
+  claimError?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [opponent, setOpponent] = useState("");
@@ -64,14 +67,15 @@ export function TeamGameStep({
             <li key={g.id}>
               <button
                 type="button"
-                className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-left [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken"
+                disabled={g.busy}
+                className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-left disabled:cursor-not-allowed disabled:opacity-60 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken"
                 onClick={() => onChoose({ kind: "scheduled", id: g.id, opponent: g.opponent, date: g.date, homeAway: g.home_away })}
               >
                 <span>
                   <span className="tabular-nums">{formatGameDate(g.date)}</span> · {g.home_away === "home" ? "vs" : "at"} {g.opponent}
                   {g.location && <span className="text-sm text-muted"> · {g.location}</span>}
                 </span>
-                <span className="text-sm font-medium text-accent">Use this game</span>
+                {g.busy ? <span className="text-sm text-muted">Being analyzed right now</span> : <span className="text-sm font-medium text-accent">Use this game</span>}
               </button>
             </li>
           ))}
@@ -117,7 +121,7 @@ export function TeamGameStep({
         )}
       </div>
       <p role="alert" className="mt-2 min-h-5 text-sm text-danger">
-        {error}
+        {error ?? claimError}
       </p>
 
       {analyzed.length > 0 && (
@@ -128,7 +132,9 @@ export function TeamGameStep({
             {analyzed.map((g) => (
               <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                 <span>
+                  <span aria-hidden className="mr-1.5 font-semibold text-accent">✓</span>
                   <span className="tabular-nums">{formatGameDate(g.date)}</span> · {g.home_away === "home" ? "vs" : "at"} {g.opponent}
+                  <span className="ml-2 text-xs text-muted">Stats tracked</span>
                 </span>
                 <button type="button" className="btn btn-secondary min-h-9 px-3" disabled={opening === g.id} onClick={() => void open(g.id)}>
                   {opening === g.id ? "Opening…" : "Open"}

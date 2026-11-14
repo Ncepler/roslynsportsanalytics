@@ -6,7 +6,7 @@ import { shrinkImage } from "@/lib/client/image";
 import type { DraftRow } from "@/lib/schedule/read";
 
 // Adding many games at once, for one team and season. Two ways to fill the review table: type the games in, or let
-// the AI read up to 3 screenshots. Either way nothing is saved until an admin has checked every row and presses the
+// the AI read up to 3 pictures. Either way nothing is saved until an admin has checked every row and presses the
 // button, and saving only ADDS games (the server never changes or removes existing ones).
 
 type Row = { key: number; include: boolean; date: string; opponent: string; home_away: "" | "home" | "away"; location: string };
@@ -37,8 +37,9 @@ export function ScheduleImport({
   opponents: string[];
   onDone: () => Promise<void>;
 }) {
-  const [mode, setMode] = useState<"type" | "shots">("type");
+  const [mode, setMode] = useState<"type" | "paste" | "shots">("type");
   const [rows, setRows] = useState<Row[]>(() => [blank(), blank(), blank()]);
+  const [pasted, setPasted] = useState("");
   const [shots, setShots] = useState<Shot[]>([]);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,16 +69,16 @@ export function ScheduleImport({
     setError(null);
     const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (list.length === 0) return setError("Choose pictures (PNG, JPG or WebP).");
-    if (shots.length + list.length > 3) return setError("You can add up to 3 screenshots.");
+    if (shots.length + list.length > 3) return setError("You can add up to 3 pictures.");
     try {
       const made: Shot[] = [];
       for (const f of list) {
         const small = await shrinkImage(f);
-        made.push({ key: ++counter, name: f instanceof File ? f.name : "Pasted screenshot", preview: `data:${small.mediaType};base64,${small.data}`, data: small.data });
+        made.push({ key: ++counter, name: f instanceof File ? f.name : "Pasted picture", preview: `data:${small.mediaType};base64,${small.data}`, data: small.data });
       }
       setShots((s) => [...s, ...made]);
     } catch {
-      setError("Couldn't read that picture. Try a screenshot (PNG or JPG).");
+      setError("Couldn't read that picture. Try a PNG or JPG picture.");
     }
   }
   const onPaste = (e: ClipboardEvent) => {
@@ -98,16 +99,16 @@ export function ScheduleImport({
     setError(null);
     setNotice(null);
     try {
-      const res = await api<{ rows: DraftRow[]; merged: number; cut: number }>("/api/admin/schedule/read", {
-        body: { season_id: seasonId, images: shots.map((s) => ({ mediaType: "image/jpeg", data: s.data })) },
+      const res = await api<{ rows: DraftRow[]; merged: number; cut: number }>(mode === "paste" ? "/api/admin/schedule/read-text" : "/api/admin/schedule/read", {
+        body: mode === "paste" ? { season_id: seasonId, text: pasted } : { season_id: seasonId, images: shots.map((s) => ({ mediaType: "image/jpeg", data: s.data })) },
       });
-      if (res.rows.length === 0) setError("The AI didn't find any games in those pictures. Try a clearer screenshot, or type them in.");
+      if (res.rows.length === 0) setError(mode === "paste" ? "The AI didn't find any games in that text. Check what you pasted, or type them in." : "The AI didn't find any games in those pictures. Try clearer pictures, or type them in.");
       else {
         setRows(res.rows.map((r) => blank({ date: r.date ?? "", opponent: r.opponent ?? "", home_away: r.home_away ?? "", location: r.location ?? "" })));
-        setNotice(`Read ${res.rows.length} game${res.rows.length === 1 ? "" : "s"}${res.merged ? ` (${res.merged} repeated ${res.merged === 1 ? "row was" : "rows were"} merged)` : ""}${res.cut ? `. ${res.cut} more were cut off; add them in a second batch.` : ""}. Check every row against the picture, fix anything wrong, then add them. Rows that need attention are marked.`);
+        setNotice(`Read ${res.rows.length} game${res.rows.length === 1 ? "" : "s"}${res.merged ? ` (${res.merged} repeated ${res.merged === 1 ? "row was" : "rows were"} merged)` : ""}${res.cut ? `. ${res.cut} more were cut off; add them in a second batch.` : ""}. Check every row against the original, fix anything wrong, then add them. Rows that need attention are marked.`);
       }
     } catch (err) {
-      setError(msg(err, "Couldn't read the screenshots."));
+      setError(msg(err, "Couldn't read the schedule."));
     }
     setReading(false);
   }
@@ -132,13 +133,13 @@ export function ScheduleImport({
 
   return (
     <details className="mt-6 rounded-[0.75rem] border border-border" onPaste={onPaste}>
-      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Add several games at once (type them in, or read screenshots)</summary>
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Add several games at once</summary>
       <div className="border-t border-border px-4 py-4">
         <p className="text-sm text-muted">
           For {teamLabel}, {seasonLabel}. This only adds games. It never changes or removes games that are already on the schedule, and games that are already there are skipped.
         </p>
         <div role="tablist" aria-label="How to add" className="mt-3 inline-flex rounded-[0.75rem] bg-surface-sunken p-1">
-          {(["type", "shots"] as const).map((m) => (
+          {(["type", "paste", "shots"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -147,10 +148,23 @@ export function ScheduleImport({
               onClick={() => setMode(m)}
               className={`min-h-10 rounded-[0.5rem] px-4 text-[0.9375rem] font-medium ${mode === m ? "bg-surface shadow-[0_1px_2px_oklch(0_0_0/0.08)]" : "text-muted"}`}
             >
-              {m === "type" ? "Type them in" : "From screenshots"}
+              {m === "type" ? "Type them in" : m === "paste" ? "Paste the schedule" : "Add pictures of the schedule"}
             </button>
           ))}
         </div>
+
+        {mode === "paste" && (
+          <div className="mt-4">
+            <label className="block">
+              <span className="label">Paste the schedule here</span>
+              <textarea className="field min-h-40" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Copy the schedule from a web page, email or spreadsheet and paste it" maxLength={20000} />
+            </label>
+            <button type="button" className="btn btn-primary mt-3" disabled={reading || pasted.trim().length < 5} onClick={() => void read()}>
+              {reading ? "Reading…" : "Build the schedule"}
+            </button>
+            <p className="hint mt-2">The text is sent to Gemini to build the rows and is not kept. Nothing is added until you check the rows below and confirm.</p>
+          </div>
+        )}
 
         {mode === "shots" && (
           <div className="mt-4">
@@ -163,9 +177,9 @@ export function ScheduleImport({
               onDrop={onDrop}
               className={`rounded-[0.75rem] border border-dashed px-4 py-6 text-center ${over ? "border-accent bg-surface" : "border-border-strong"}`}
             >
-              <p className="text-sm">Drop up to 3 screenshots of the schedule here, paste them, or</p>
+              <p className="text-sm">Upload photos of the schedule here (up to 3). Drop them, paste them, or</p>
               <button type="button" className="btn btn-secondary mt-3" disabled={shots.length >= 3} onClick={() => fileInput.current?.click()}>
-                Choose screenshots
+                Choose pictures
               </button>
               <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { if (e.target.files) void takeFiles(Array.from(e.target.files)); e.target.value = ""; }} />
             </div>
@@ -174,7 +188,7 @@ export function ScheduleImport({
                 {shots.map((s) => (
                   <li key={s.key} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={s.preview} alt={`Screenshot ${s.name}`} className="h-28 w-auto rounded-[0.5rem] border border-border object-cover" />
+                    <img src={s.preview} alt={`Picture ${s.name}`} className="h-28 w-auto rounded-[0.5rem] border border-border object-cover" />
                     <button type="button" aria-label={`Remove ${s.name}`} className="btn btn-secondary absolute -right-2 -top-2 !min-h-7 !px-2 text-xs" onClick={() => setShots((all) => all.filter((x) => x.key !== s.key))}>
                       ✕
                     </button>

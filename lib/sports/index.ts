@@ -13,5 +13,10 @@ export function getSport(id: string): SportConfig | undefined {
 }
 
 export function defaultStatIds(sport: SportConfig): string[] {
-  return sport.stats.filter((s) => s.defaultOn).map((s) => s.id);
+  return sport.stats.filter((s) => s.defaultOn || s.required).map((s) => s.id);
+}
+
+/** Stat ids Season trends needs; these are always tracked. */
+export function requiredStatIds(sport: SportConfig): string[] {
+  return sport.stats.filter((s) => s.required).map((s) => s.id);
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { formatGameDate } from "@/components/games/status-chip";
 import { api, ApiError } from "@/lib/client/api";
-import type { GameRow, OpponentRow, SeasonRow, TeamRow } from "@/lib/db/admin";
+import type { GameRow, OpponentRow, SeasonRow, TeamRow, TeamWithSchedule } from "@/lib/db/admin";
 import { ScheduleImport } from "@/components/admin/schedule-import";
 import { GENDERS, hasStats, LEVELS, SPORTS, teamName } from "@/lib/teams/options";
 
@@ -38,7 +38,7 @@ function Field({ label, children, wide = false }: { label: string; children: Rea
 }
 
 export function ClubAdmin() {
-  const [teams, setTeams] = useState<TeamRow[] | null>(null);
+  const [teams, setTeams] = useState<TeamWithSchedule[] | null>(null);
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [opponents, setOpponents] = useState<OpponentRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function ClubAdmin() {
   const reload = useCallback(async () => {
     try {
       const [t, s, o] = await Promise.all([
-        api<{ teams: TeamRow[] }>("/api/admin/teams"),
+        api<{ teams: TeamWithSchedule[] }>("/api/admin/teams"),
         api<{ seasons: SeasonRow[] }>("/api/admin/seasons"),
         api<{ opponents: OpponentRow[] }>("/api/admin/opponents"),
       ]);
@@ -95,12 +95,17 @@ export function ClubAdmin() {
 
 // ---------- Teams ----------
 
-function TeamsSection({ teams, onChange }: { teams: TeamRow[]; onChange: () => Promise<void> }) {
+function TeamsSection({ teams, onChange }: { teams: TeamWithSchedule[]; onChange: () => Promise<void> }) {
+  const [adding, setAdding] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [gender, setGender] = useState("");
   const [level, setLevel] = useState("");
   const [sport, setSport] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Teams with a schedule first, then those without; each group A to Z.
+  const sorted = [...teams].sort((a, b) => Number(b.has_schedule) - Number(a.has_schedule) || teamName(a).localeCompare(teamName(b)));
 
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -111,6 +116,7 @@ function TeamsSection({ teams, onChange }: { teams: TeamRow[]; onChange: () => P
       setGender("");
       setLevel("");
       setSport("");
+      setAdding(false);
       await onChange();
     } catch (err) {
       setError(msg(err, "Couldn't add the team."));
@@ -118,7 +124,7 @@ function TeamsSection({ teams, onChange }: { teams: TeamRow[]; onChange: () => P
     setBusy(false);
   }
 
-  async function archive(t: TeamRow, archived: boolean) {
+  async function archive(t: TeamWithSchedule, archived: boolean) {
     setError(null);
     try {
       await api(`/api/admin/teams/${t.id}`, { method: "PATCH", body: { archived } });
@@ -130,6 +136,12 @@ function TeamsSection({ teams, onChange }: { teams: TeamRow[]; onChange: () => P
 
   return (
     <>
+      {!adding && (
+        <button type="button" className="btn btn-secondary" onClick={() => setAdding(true)}>
+          Add team
+        </button>
+      )}
+      {adding && (
       <form onSubmit={add} className="flex flex-wrap items-end gap-3">
         <Field label="Gender">
           <select className="field" value={gender} onChange={(e) => setGender(e.target.value)} required>
@@ -164,25 +176,47 @@ function TeamsSection({ teams, onChange }: { teams: TeamRow[]; onChange: () => P
         <button type="submit" className="btn btn-primary" disabled={busy || !gender || !level || !sport}>
           {busy ? "Adding…" : "Add team"}
         </button>
+        <button type="button" className="btn btn-ghost" onClick={() => setAdding(false)}>
+          Cancel
+        </button>
       </form>
+      )}
       <Problem text={error} />
       {teams.length === 0 ? (
         <p className="mt-2 text-sm text-muted">No teams yet.</p>
       ) : (
-        <ul className="mt-2 divide-y divide-border rounded-[0.75rem] border border-border">
-          {teams.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-              <span className={t.archived ? "text-muted line-through" : ""}>
-                {teamName(t)}
-                {!hasStats(t.sport) && <span className="ml-2 text-xs text-muted">(no stats yet)</span>}
-                {t.archived && <span className="ml-2 text-xs no-underline">Archived</span>}
-              </span>
-              <button type="button" className="btn btn-ghost min-h-9 px-2" onClick={() => void archive(t, !t.archived)}>
-                {t.archived ? "Restore" : "Archive"}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="inline-block size-2.5 rounded-full bg-green-600" /> Green dot: has a schedule
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="inline-block size-2.5 rounded-full bg-red-600" /> Red dot: no schedule
+            </span>
+          </p>
+          <ul className="mt-2 divide-y divide-border rounded-[0.75rem] border border-border">
+            {(showAll ? sorted : sorted.slice(0, 5)).map((t) => (
+              <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="flex items-center gap-2.5">
+                  <span aria-label={t.has_schedule ? "Has a schedule" : "No schedule"} className={`inline-block size-2.5 shrink-0 rounded-full ${t.has_schedule ? "bg-green-600" : "bg-red-600"}`} />
+                  <span className={t.archived ? "text-muted line-through" : ""}>
+                    {teamName(t)}
+                    {!hasStats(t.sport) && <span className="ml-2 text-xs text-muted">(no stats yet)</span>}
+                    {t.archived && <span className="ml-2 text-xs no-underline">Archived</span>}
+                  </span>
+                </span>
+                <button type="button" className="btn btn-ghost min-h-9 px-2" onClick={() => void archive(t, !t.archived)}>
+                  {t.archived ? "Restore" : "Archive"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {sorted.length > 5 && (
+            <button type="button" className="btn btn-ghost mt-2" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Show fewer" : `See more (${sorted.length - 5} more teams)`}
+            </button>
+          )}
+        </>
       )}
     </>
   );
@@ -297,11 +331,12 @@ function ScheduleSection({
   const [location, setLocation] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const effectiveTeam = teamId || activeTeams[0]?.id || "";
+  // No default: an admin must choose which team a schedule is for before anything can be added.
+  const effectiveTeam = teamId;
   const effectiveSeason = seasonId || seasons.find((s) => s.is_current)?.id || seasons[0]?.id || "";
 
   async function load() {
-    if (!effectiveTeam || !effectiveSeason) return setGames([]);
+    if (!effectiveTeam || !effectiveSeason) return setGames(null);
     try {
       const res = await api<{ games: GameRow[] }>(`/api/admin/games?team_id=${effectiveTeam}&season_id=${effectiveSeason}`);
       setGames(res.games);
@@ -396,7 +431,8 @@ function ScheduleSection({
     <>
       <div className="flex flex-wrap gap-3">
         <Field label="Team" wide>
-          <select className="field" value={effectiveTeam} onChange={(e) => { setTeamId(e.target.value); resetForm(); }}>
+          <select className="field" value={effectiveTeam} onChange={(e) => { setTeamId(e.target.value); setGames(null); resetForm(); }}>
+            <option value="">Choose a team…</option>
             {activeTeams.map((t) => (
               <option key={t.id} value={t.id}>
                 {teamName(t)}
@@ -451,7 +487,7 @@ function ScheduleSection({
           <input className="field" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={120} />
         </Field>
         <div className="flex gap-2">
-          <button type="submit" className="btn btn-primary" disabled={busy || !date || !opponentId || adding}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !effectiveTeam || !date || !opponentId || adding}>
             {editing ? "Save changes" : "Add game"}
           </button>
           {editing && (
@@ -484,7 +520,9 @@ function ScheduleSection({
         ) : null;
       })()}
 
-      {games === null ? (
+      {!effectiveTeam ? (
+        <p className="mt-4 text-sm text-muted">Choose a team above to see its schedule or add games.</p>
+      ) : games === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : games.length === 0 ? (
         <p className="text-sm text-muted">No games scheduled for this team and season.</p>
@@ -498,7 +536,7 @@ function ScheduleSection({
                 {g.home_away === "home" ? "vs" : "at"} {g.opponent?.name ?? "Unknown"}
                 {g.location && <span className="text-sm text-muted"> · {g.location}</span>}
                 <span className={`ml-2 rounded-full border px-2.5 py-0.5 text-xs font-medium ${g.status === "analyzed" ? "border-border-strong text-muted" : "border-accent text-accent"}`}>
-                  {g.status === "analyzed" ? "Analyzed" : "Scheduled"}
+                  {g.status === "analyzed" ? "✓ Stats tracked" : "Not analyzed yet"}
                 </span>
               </span>
               <span className="flex gap-1">

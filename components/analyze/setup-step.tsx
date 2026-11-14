@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { GameSetup } from "@/lib/gemini/prompt";
-import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
+import { defaultStatIds, getSport, requiredStatIds, SPORTS } from "@/lib/sports";
 import type { Tier } from "@/lib/sports/types";
 
 // Group titles for the stats checklist: how much to trust each kind of stat.
@@ -94,14 +94,28 @@ function ColorPicker({ value, onChange, invalid }: { value: string; onChange: (v
 
 export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: { setup: GameSetup; onChange: (s: GameSetup) => void; onNext: () => void; onBack: () => void; /** The sport and opponent come from the chosen game, so they can't be changed here. */ locked?: boolean }) {
   const [tried, setTried] = useState(false);
+  const colorRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const awayColorRef = useRef<HTMLInputElement>(null);
   const sport = getSport(setup.sportId)!;
+  const required = requiredStatIds(sport);
   const set = <K extends keyof GameSetup>(k: K, v: GameSetup[K]) => onChange({ ...setup, [k]: v });
   const missing = { roslynColor: !setup.roslynColor.trim(), awayName: !setup.awayName.trim(), awayColor: !setup.awayColor.trim() };
   const ok = !missing.roslynColor && !missing.awayName && !missing.awayColor;
   const err = (key: keyof typeof missing, msg: string) => tried && missing[key] && <span className="mt-1 block text-sm text-danger">{msg}</span>;
 
   function toggle(id: string, on: boolean) {
+    if (required.includes(id)) return;
     set("statIds", on ? [...setup.statIds, id] : setup.statIds.filter((x) => x !== id));
+  }
+
+  /** Take the person back to the first thing they forgot, so a failed Next is never a mystery. */
+  function goToFirstMissing() {
+    const target = missing.roslynColor ? colorRef.current : missing.awayName ? nameRef.current : awayColorRef.current;
+    if (!target) return;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    const focusable = target instanceof HTMLInputElement ? target : target.querySelector<HTMLElement>("button");
+    focusable?.focus({ preventScroll: true });
   }
 
   return (
@@ -110,7 +124,14 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
       onSubmit={(e) => {
         e.preventDefault();
         setTried(true);
-        if (ok) onNext();
+        if (!ok) {
+          goToFirstMissing();
+          return;
+        }
+        // The red-star stats are always tracked, even for a game reopened with fewer.
+        const missingRequired = required.filter((id) => !setup.statIds.includes(id));
+        if (missingRequired.length > 0) onChange({ ...setup, statIds: [...setup.statIds, ...missingRequired] });
+        onNext();
       }}
     >
       <h2 className="text-xl font-semibold tracking-[-0.01em]">Who&apos;s playing?</h2>
@@ -137,7 +158,7 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
         </div>
         )}
 
-        <div>
+        <div ref={colorRef}>
           <span className="label">Roslyn&apos;s jerseys</span>
           <ColorPicker value={setup.roslynColor} onChange={(v) => set("roslynColor", v)} invalid={tried && missing.roslynColor} />
           {err("roslynColor", "Pick Blue, White, or Other.")}
@@ -146,12 +167,12 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="label">Opponent</span>
-            <input className="field" readOnly={locked} value={setup.awayName} placeholder="e.g. Port Washington" aria-invalid={(tried && missing.awayName) || undefined} onChange={(e) => set("awayName", e.target.value)} />
+            <input ref={nameRef} className="field" readOnly={locked} value={setup.awayName} placeholder="e.g. Port Washington" aria-invalid={(tried && missing.awayName) || undefined} onChange={(e) => set("awayName", e.target.value)} />
             {err("awayName", "Enter the other team.")}
           </label>
           <label className="block">
             <span className="label">Their jerseys</span>
-            <input className="field" value={setup.awayColor} placeholder="e.g. navy" aria-invalid={(tried && missing.awayColor) || undefined} onChange={(e) => set("awayColor", e.target.value)} />
+            <input ref={awayColorRef} className="field" value={setup.awayColor} placeholder="e.g. navy" aria-invalid={(tried && missing.awayColor) || undefined} onChange={(e) => set("awayColor", e.target.value)} />
             {err("awayColor", "Enter their color.")}
           </label>
         </div>
@@ -174,6 +195,11 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
 
       <fieldset className="mt-10">
         <legend className="text-xl font-semibold tracking-[-0.01em]">What to track</legend>
+        {required.length > 0 && (
+          <p className="mt-1 text-sm text-muted">
+            <span aria-hidden className="font-semibold text-danger">*</span> Needed for Season trends. Always tracked.
+          </p>
+        )}
         <div className="mt-4 space-y-6">
           {TIERS.map(({ tier, title, blurb }) => {
             const stats = sport.stats.filter((s) => s.tier === tier);
@@ -189,8 +215,15 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
                 {stats.map((s) => (
                   <li key={s.id}>
                     <label className="flex min-h-10 cursor-pointer items-center gap-2.5 py-1">
-                      <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={setup.statIds.includes(s.id)} onChange={(e) => toggle(s.id, e.target.checked)} />
-                      <span className="text-[0.9375rem]">{s.label}</span>
+                      <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={s.required || setup.statIds.includes(s.id)} disabled={s.required} onChange={(e) => toggle(s.id, e.target.checked)} />
+                      <span className="text-[0.9375rem]">
+                        {s.label}
+                        {s.required && (
+                          <span className="ml-1 font-semibold text-danger" title="Needed for Season trends" aria-label="needed for Season trends">
+                            *
+                          </span>
+                        )}
+                      </span>
                     </label>
                   </li>
                 ))}
@@ -222,6 +255,11 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
         <button type="submit" className="btn btn-primary">
           Next
         </button>
+        {tried && !ok && (
+          <p role="alert" className="self-center text-sm text-danger">
+            Fill in the highlighted fields.
+          </p>
+        )}
       </div>
     </form>
   );

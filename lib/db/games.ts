@@ -10,16 +10,57 @@ import { hasStats } from "@/lib/teams/options";
 /** Version of the stored possession format. Bump when the shape of `events` changes. */
 export const SCHEMA_VERSION = 1;
 
-export type PickableGame = { id: string; date: string; opponent: string; home_away: "home" | "away"; location: string | null; our_score: number | null; opp_score: number | null };
+export type PickableGame = { id: string; date: string; opponent: string; home_away: "home" | "away"; location: string | null; our_score: number | null; opp_score: number | null; /** Someone is analyzing this game right now. */ busy?: boolean };
+
+/** A claim not refreshed for this long is treated as abandoned (closed laptop, lost tab). */
+export const CLAIM_TTL_MS = 30 * 60 * 1000;
+const claimCutoff = () => new Date(Date.now() - CLAIM_TTL_MS).toISOString();
+
+const lockColumnsMissing = (code?: string) => code === "42703" || code === "PGRST204"; // migration 0004 not run yet
+
+/** Marks a scheduled game as being analyzed by this browser tab. False when someone else holds a fresh claim. */
+export async function claimGame(gameId: string, token: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("games")
+    .update({ analyzing_token: token, analyzing_since: new Date().toISOString() })
+    .eq("id", gameId)
+    .eq("status", "scheduled")
+    .or(`analyzing_token.is.null,analyzing_token.eq.${token},analyzing_since.lt.${claimCutoff()}`)
+    .select("id");
+  if (error) {
+    if (lockColumnsMissing(error.code)) throw new DbError(503, "The database needs its latest update (migration 0004). Ask the admin to run it in Supabase.");
+    dbFail(error);
+  }
+  return (data ?? []).length > 0;
+}
+
+/** Clears this tab's claim (and only this tab's). */
+export async function releaseGame(gameId: string, token: string): Promise<void> {
+  const { error } = await db().from("games").update({ analyzing_token: null, analyzing_since: null }).eq("id", gameId).eq("analyzing_token", token);
+  if (error && !lockColumnsMissing(error.code)) dbFail(error);
+}
 
 /** A team's games for the Analyze picker: not yet analyzed, and already analyzed. */
 export async function listTeamGames(teamId: string): Promise<{ scheduled: PickableGame[]; analyzed: PickableGame[]; opponents: string[] }> {
-  const gamesRes = await db().from("games").select("id, game_date, home_away, location, status, our_score, opp_score, opponent:opponents(name)").eq("team_id", teamId).order("game_date");
+  const lockSelect = "id, game_date, home_away, location, status, our_score, opp_score, analyzing_since, opponent:opponents(name)";
+  let gamesRes = await db().from("games").select(lockSelect).eq("team_id", teamId).order("game_date");
+  // Before migration 0004 is run the lock columns don't exist: list the games without lock info instead of failing.
+  if (gamesRes.error && lockColumnsMissing(gamesRes.error.code)) gamesRes = (await db().from("games").select("id, game_date, home_away, location, status, our_score, opp_score, opponent:opponents(name)").eq("team_id", teamId).order("game_date")) as unknown as typeof gamesRes;
   if (gamesRes.error) dbFail(gamesRes.error);
   const opponentsRes = await db().from("opponents").select("name").order("name");
   if (opponentsRes.error) dbFail(opponentsRes.error);
-  const rows = (gamesRes.data ?? []) as unknown as (GameRow & { game_date: string })[];
-  const pick = (g: GameRow): PickableGame => ({ id: g.id, date: g.game_date, opponent: g.opponent?.name ?? "Unknown", home_away: g.home_away, location: g.location, our_score: g.our_score, opp_score: g.opp_score });
+  const rows = (gamesRes.data ?? []) as unknown as (GameRow & { game_date: string; analyzing_since?: string | null })[];
+  const cutoffMs = Date.now() - CLAIM_TTL_MS;
+  const pick = (g: GameRow & { analyzing_since?: string | null }): PickableGame => ({
+    id: g.id,
+    date: g.game_date,
+    opponent: g.opponent?.name ?? "Unknown",
+    home_away: g.home_away,
+    location: g.location,
+    our_score: g.our_score,
+    opp_score: g.opp_score,
+    busy: Boolean(g.analyzing_since && Date.parse(g.analyzing_since) > cutoffMs),
+  });
   return {
     scheduled: rows.filter((g) => g.status === "scheduled").map(pick),
     analyzed: rows.filter((g) => g.status === "analyzed").map(pick).reverse(),
@@ -109,6 +150,9 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
     if (error.code === "P0002") throw new DbError(404, "Game not found.");
     dbFail(error);
   }
+  // The analysis is saved: whoever held the claim is done with it.
+  const cleared = await db().from("games").update({ analyzing_token: null, analyzing_since: null }).eq("id", gameId);
+  if (cleared.error && !lockColumnsMissing(cleared.error.code)) dbFail(cleared.error);
   return { gameId, created };
 }
 

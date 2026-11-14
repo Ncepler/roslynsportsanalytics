@@ -25,10 +25,21 @@ export type GameRow = {
 
 // ---------- teams ----------
 
-export async function listTeams(): Promise<TeamRow[]> {
+export type TeamWithSchedule = TeamRow & { has_schedule: boolean };
+
+/** All teams, each marked with whether it has any game on the current season's schedule. */
+export async function listTeams(): Promise<TeamWithSchedule[]> {
   const { data, error } = await db().from("teams").select("*").order("sport").order("gender").order("level");
   if (error) dbFail(error);
-  return data as TeamRow[];
+  const season = await db().from("seasons").select("id").eq("is_current", true).maybeSingle();
+  if (season.error) dbFail(season.error);
+  const scheduled = new Set<string>();
+  if (season.data) {
+    const games = await db().from("games").select("team_id").eq("season_id", season.data.id as string).limit(5000);
+    if (games.error) dbFail(games.error);
+    for (const g of games.data ?? []) scheduled.add(g.team_id as string);
+  }
+  return (data as TeamRow[]).map((t) => ({ ...t, has_schedule: scheduled.has(t.id) }));
 }
 
 export async function createTeam(input: TeamKey): Promise<TeamRow> {

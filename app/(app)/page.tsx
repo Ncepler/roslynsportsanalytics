@@ -4,7 +4,23 @@ import { Suspense } from "react";
 import { requireMember } from "@/lib/auth/server";
 import { getCurrentSeasonLabel, listActiveTeams, tryDb } from "@/lib/db/read";
 import { shortSeason } from "@/lib/schedule/dates";
-import { SPORTS, teamName } from "@/lib/teams/options";
+import { SPORTS, splitByGender, teamName } from "@/lib/teams/options";
+import type { TeamRow } from "@/lib/db/admin";
+
+function TeamLinks({ teams, season }: { teams: TeamRow[]; season: string | null }) {
+  return (
+    <ul className="space-y-2">
+      {teams.map((t) => (
+        <li key={t.id}>
+          <Link href={`/t/${t.slug}`} className="flex min-h-14 items-center justify-between gap-3 rounded-[0.75rem] border border-border bg-surface px-4 font-medium [@media(hover:hover)_and_(pointer:fine)]:hover:border-border-strong">
+            <span>{teamName(t)}</span>
+            {season && <span className="text-sm font-normal tabular-nums text-muted">{season}</span>}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
 
@@ -27,22 +43,22 @@ async function Teams() {
       </div>
     );
   }
-  const groups = SPORTS.map((s) => ({ sport: s, teams: result.data.filter((t) => t.sport === s.value) })).filter((g) => g.teams.length > 0);
+  const groups = SPORTS.map((s) => ({ sport: s, teams: result.data.filter((t) => t.sport === s.value) })).filter((g) => g.teams.length > 0).map((g) => ({ ...g, ...splitByGender(g.teams) }));
   return (
     <div className="space-y-8">
       {groups.map((g) => (
         <section key={g.sport.value}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.04em] text-muted">{g.sport.label}</h2>
-          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {g.teams.map((t) => (
-              <li key={t.id}>
-                <Link href={`/t/${t.slug}`} className="flex min-h-14 items-center justify-between gap-3 rounded-[0.75rem] border border-border bg-surface px-4 font-medium [@media(hover:hover)_and_(pointer:fine)]:hover:border-border-strong">
-                  <span>{teamName(t)}</span>
-                  {season && <span className="text-sm font-normal tabular-nums text-muted">{season}</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2 grid gap-x-3 gap-y-4 sm:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-xs font-medium text-muted">Girls</h3>
+              <TeamLinks teams={g.girls} season={season} />
+            </div>
+            <div>
+              <h3 className="mb-2 text-xs font-medium text-muted">Boys</h3>
+              <TeamLinks teams={g.boys} season={season} />
+            </div>
+          </div>
         </section>
       ))}
     </div>

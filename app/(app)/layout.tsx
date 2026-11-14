@@ -11,9 +11,9 @@ import { shortSeason } from "@/lib/schedule/dates";
 // The drawer's team list. Demo users never read the database (they only see the /test simulation).
 async function Nav() {
   const role = await getRole();
-  if (role !== "member" && role !== "admin") return <AppNav teams={[]} isAdmin={false} drawer={false} />;
+  if (role !== "member" && role !== "admin") return <AppNav teams={[]} drawer={false} />;
   const [result, season] = await Promise.all([tryDb(listActiveTeams), tryDb(getCurrentSeasonLabel)]);
-  return <AppNav teams={result.ok ? result.data : []} isAdmin={role === "admin"} drawer season={season.ok && season.data ? shortSeason(season.data) : null} />;
+  return <AppNav teams={result.ok ? result.data : []} drawer season={season.ok && season.data ? shortSeason(season.data) : null} />;
 }
 
 // Shown while the nav loads. Plain on purpose: usePathname() needs a Suspense boundary on dynamic routes.

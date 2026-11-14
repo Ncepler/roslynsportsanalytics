@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, type GeminiFile } from "@/lib/client/api";
+import { api, ApiError, type GeminiFile } from "@/lib/client/api";
 import { saveGameToTeam, type ReopenedGame } from "@/lib/client/save";
 import type { PickableGame } from "@/lib/db/games";
 import type { Sheet } from "@/lib/sheets";
@@ -59,7 +59,7 @@ export type TeamContext = {
 /** The game this person picked: a scheduled game (`id`), or one to be added on save (`id` null). */
 type ChosenGame = { id: string | null; opponent: string; date: string; homeAway: "home" | "away"; reopened: boolean; scores: { roslyn: number | null; opponent: number | null } };
 
-export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { makeBackend?: () => Backend; demo?: boolean; team?: TeamContext; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
+export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSaved }: { makeBackend?: () => Backend; demo?: boolean; team?: TeamContext; /** Called after a game is saved, so the page can refresh the schedule and the "analyzed" checkmarks. */ onSaved?: () => void; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
   const testMode = Boolean(ownerToken);
   const [step, setStep] = useState<StepIndex>(0);
   const [reachable, setReachable] = useState<StepIndex>(0);
@@ -95,8 +95,39 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
   const [game, setGame] = useState<ChosenGame | null>(null);
   const [saved, setSaved] = useState(false);
 
-  function chooseGame(c: TeamGameChoice) {
+  // One person per game: choosing a scheduled game claims it, a heartbeat keeps the claim fresh, and finishing,
+  // switching games or closing the page gives it back. A claim nobody refreshes expires after 30 minutes.
+  // Made on first use (an event or effect), never while rendering, so it is a fresh random value per tab.
+  const claimTokenRef = useRef<string | null>(null);
+  const getClaimToken = () => (claimTokenRef.current ??= crypto.randomUUID());
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const claimedId = team && game?.id && !game.reopened && !saved ? game.id : null;
+  const claimedRef = useRef<string | null>(null);
+  useEffect(() => {
+    claimedRef.current = claimedId;
+  }, [claimedId]);
+
+  function releaseClaim(id: string | null) {
+    if (id) void api(`/api/games/${id}/release`, { body: { token: getClaimToken() }, keepalive: true }).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!claimedId) return;
+    const timer = setInterval(() => void api(`/api/games/${claimedId}/claim`, { body: { token: getClaimToken() } }).catch(() => {}), 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [claimedId]);
+
+  async function chooseGame(c: TeamGameChoice) {
     if (!team) return;
+    setClaimError(null);
+    if (c.kind === "scheduled") {
+      try {
+        await api(`/api/games/${c.id}/claim`, { body: { token: getClaimToken() } });
+      } catch (err) {
+        setClaimError(err instanceof ApiError ? err.message : "Couldn't start this game. Try again.");
+        return;
+      }
+    }
     setGame({ id: c.kind === "scheduled" ? c.id : null, opponent: c.opponent, date: c.date, homeAway: c.homeAway, reopened: false, scores: { roslyn: null, opponent: null } });
     setSaved(false);
     // The sport comes from the team and the opponent from the game, not from typing.
@@ -119,6 +150,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
 
   /** Starts over at the game picker. */
   function changeGame() {
+    releaseClaim(claimedRef.current);
     runAbort.current?.abort();
     uploadAbort.current?.abort();
     if (geminiName.current) void backend.deleteFile(geminiName.current);
@@ -165,6 +197,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
       } else throw err;
     }
     setSaved(true);
+    onSaved?.();
   }
 
   const go = useCallback((s: StepIndex) => {
@@ -266,6 +299,28 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
     return () => window.removeEventListener("pagehide", onUnload);
   }, [backend]);
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
+
+  // Leaving the page (close, reload, another site) loses an unsaved run: ask first, and give the game back if they go.
+  const unsaved = (run.phase !== "idle" && run.phase !== "error" && run.phase !== "rejected" && run.phase !== "done") || (log !== null && !saved && !game?.reopened);
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
+  useEffect(() => {
+    const giveBack = () => releaseClaim(claimedRef.current);
+    window.addEventListener("pagehide", giveBack);
+    return () => {
+      window.removeEventListener("pagehide", giveBack);
+      // The flow itself is going away (another team, or out of the team pages): stop work, clean up, give the game back.
+      giveBack();
+      runAbort.current?.abort();
+      uploadAbort.current?.abort();
+      if (geminiName.current) void backend.deleteFile(geminiName.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---------- estimate (updates live as the trim changes) ----------
   const ranges = useMemo(() => keptRanges(trim.range, trim.skips), [trim]);
@@ -466,7 +521,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team }: { m
           (demo || testMode || game ? (
             <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} />
           ) : team ? (
-            <TeamGameStep scheduled={team.scheduled} analyzed={team.analyzed} opponents={team.opponents} onChoose={chooseGame} onReopen={reopenGame} />
+            <TeamGameStep scheduled={team.scheduled} analyzed={team.analyzed} opponents={team.opponents} onChoose={chooseGame} onReopen={reopenGame} claimError={claimError} />
           ) : null)}
         {step === 1 && (
           <>

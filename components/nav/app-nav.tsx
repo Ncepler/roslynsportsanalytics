@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { SPORTS, teamName } from "@/lib/teams/options";
+import { SPORTS, splitByGender, teamName } from "@/lib/teams/options";
 
 export type NavTeam = { id: string; slug: string; gender: string; level: string; sport: string };
 
@@ -17,7 +17,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * ~200 ms on --ease-drawer / --ease-out; reduced-motion zeroes the durations. Opening and closing are the
  * only animations; tab switching elsewhere stays instant.
  */
-export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; isAdmin: boolean; drawer: boolean; /** Current season, short form like "26/27", shown by every team. */ season?: string | null }) {
+export function AppNav({ teams, drawer, season }: { teams: NavTeam[]; drawer: boolean; /** Current season, short form like "26/27", shown by every team. */ season?: string | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -65,7 +65,7 @@ export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; i
     };
   }, [open]);
 
-  const groups = SPORTS.map((s) => ({ sport: s, teams: teams.filter((t) => t.sport === s.value) })).filter((g) => g.teams.length > 0);
+  const groups = SPORTS.map((s) => ({ sport: s, teams: teams.filter((t) => t.sport === s.value) })).filter((g) => g.teams.length > 0).map((g) => ({ ...g, ...splitByGender(g.teams) }));
 
   return (
     <>
@@ -118,8 +118,15 @@ export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; i
                   groups.map((g) => (
                     <div key={g.sport.value} className="mb-4">
                       <h2 className="px-2 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-muted">{g.sport.label}</h2>
-                      <ul>
-                        {g.teams.map((t) => {
+                      {[
+                        { label: "Girls", list: g.girls },
+                        { label: "Boys", list: g.boys },
+                      ].map((col) =>
+                        col.list.length === 0 ? null : (
+                          <div key={col.label} className="mb-2">
+                            <h3 className="px-2 pt-1 text-xs text-muted">{col.label}</h3>
+<ul>
+                        {col.list.map((t) => {
                           const active = t.slug === slug;
                           return (
                             <li key={t.id}>
@@ -136,6 +143,9 @@ export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; i
                           );
                         })}
                       </ul>
+                          </div>
+                        ),
+                      )}
                     </div>
                   ))
                 )}
@@ -144,11 +154,6 @@ export function AppNav({ teams, isAdmin, drawer, season }: { teams: NavTeam[]; i
                 <Link href="/breakdown" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-[0.5rem] px-2 text-[0.9375rem] text-muted [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken">
                   Data &amp; privacy
                 </Link>
-                {isAdmin && (
-                  <Link href="/admin" onClick={() => setOpen(false)} className="flex min-h-11 items-center rounded-[0.5rem] px-2 text-[0.9375rem] font-medium [@media(hover:hover)_and_(pointer:fine)]:hover:bg-surface-sunken">
-                    Admin
-                  </Link>
-                )}
               </div>
             </div>
           </div>,

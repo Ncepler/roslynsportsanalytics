@@ -62,6 +62,21 @@ export function teamName(t: TeamKey): string {
   return `${labelOf(GENDERS, t.gender)} ${labelOf(LEVELS, t.level)} ${labelOf(SPORTS, t.sport)}`;
 }
 
+/** Highest-ranked level first: varsity, JV, JV2, JHS. */
+export function levelRank(level: string): number {
+  const i = LEVELS.findIndex((l) => l.value === level);
+  return i === -1 ? LEVELS.length : i;
+}
+
+/** One sport's teams as a Girls column and a Boys column, each best team first. */
+export function splitByGender<T extends TeamKey>(teams: T[]): { girls: T[]; boys: T[] } {
+  const byLevel = (a: T, b: T) => levelRank(a.level) - levelRank(b.level);
+  return {
+    girls: teams.filter((t) => t.gender === "girls").sort(byLevel),
+    boys: teams.filter((t) => t.gender === "boys").sort(byLevel),
+  };
+}
+
 /** "boys-varsity-basketball" */
 export function teamSlug(t: TeamKey): string {
   return `${t.gender}-${t.level}-${t.sport}`;

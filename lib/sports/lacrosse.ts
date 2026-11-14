@@ -26,6 +26,7 @@ export const lacrosse: SportConfig = {
       events: ["shot"],
       sheets: ["lax-defense"],
       defaultOn: true,
+      required: true,
     },
     {
       id: "turnovers",
@@ -38,6 +39,7 @@ export const lacrosse: SportConfig = {
       events: ["turnover"],
       sheets: ["lax-turnovers"],
       defaultOn: true,
+      required: true,
     },
     {
       id: "context",
@@ -48,6 +50,7 @@ export const lacrosse: SportConfig = {
       description:
         "For each possession, the defense the attacking team faced: M = man-to-man, Z = zone, F = fast break or transition (attack before the defense is set). Use null if you cannot tell.",
       sheets: ["lax-defense"],
+      required: true,
       defaultOn: true,
     },
 

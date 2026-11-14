@@ -69,7 +69,7 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
                 )}
               </span>
               <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${g.status === "analyzed" ? "border-border-strong text-muted" : "border-accent text-accent"}`}>
-                {g.status === "analyzed" ? "Analyzed" : "Scheduled"}
+                {g.status === "analyzed" ? "✓ Stats tracked" : "Not analyzed yet"}
               </span>
             </li>
           ))}
