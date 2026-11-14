@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import {
   buildGames,
@@ -15,7 +15,7 @@ import {
   type Score,
   type Sport,
 } from "@/lib/season/model";
-import { parseDelimited, readTabs, type RawTab } from "@/lib/season/parse";
+import { readTabs, type RawTab } from "@/lib/season/parse";
 import { fitLine, MIN_ABS_R, MIN_GAMES, strength } from "@/lib/season/stats";
 import type { SummaryInput } from "@/lib/season/summary";
 import { ColumnChart, LineChart, ScatterChart } from "./charts";
@@ -63,184 +63,53 @@ function TableToggle({ head, rows }: { head: string[]; rows: (string | number)[]
 const outcomeWords = (label: string) => label.replace(/ \(%\)$/, "");
 const trendTitle = (p: PairResult) => `${outcomeWords(p.y.label)} ${strength(p.r!)} ${outcomeWords(p.x.label).toLowerCase()}`;
 
-export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: RawTab[]; demoScores?: Record<string, Score>; demo?: boolean }) {
-  const [tabs, setTabs] = useState<RawTab[]>([]);
+/** The simulated Season trends (/test/season): made-up games shown through the real screens. The real tab is StoredSeason. */
+export function SeasonTab({ demoTabs, demoScores }: { demoTabs: RawTab[]; demoScores: Record<string, Score> }) {
+  const [loaded, setLoaded] = useState(false);
   const [scores, setScores] = useState<Record<string, Score>>({});
   const [sportChoice, setSportChoice] = useState<Sport | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [pasteName, setPasteName] = useState("");
-  const [pasteText, setPasteText] = useState("");
-  const [over, setOver] = useState(false);
-  const [savedLoaded, setSavedLoaded] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
+  const tabs = useMemo(() => (loaded ? demoTabs : []), [loaded, demoTabs]);
 
   const { read, skipped } = useMemo(() => readTabs(tabs), [tabs]);
   const games = useMemo(() => buildGames(read), [read]);
   const sports = [...new Set(games.map((g) => g.sport))];
   const sport: Sport | null = sportChoice && sports.includes(sportChoice) ? sportChoice : (sports[0] ?? null);
 
-  async function addFiles(files: FileList | File[]) {
-    setError(null);
-    setBusy(true);
-    const added: RawTab[] = [];
-    const problems: string[] = [];
-    for (const f of Array.from(files)) {
-      try {
-        if (/\.xlsx$/i.test(f.name)) {
-          const { default: readExcelFile } = await import("read-excel-file/browser");
-          for (const s of await readExcelFile(f)) added.push({ file: f.name, name: s.sheet, rows: s.data as RawTab["rows"] });
-        } else if (/\.(csv|tsv|txt)$/i.test(f.name)) {
-          added.push({ file: f.name, name: f.name.replace(/\.(csv|tsv|txt)$/i, ""), rows: parseDelimited(await f.text()) });
-        } else problems.push(`${f.name}: use .xlsx or .csv`);
-      } catch {
-        problems.push(`${f.name}: couldn't be read. Re-download it from Google Sheets and try again.`);
-      }
-    }
-    setTabs((t) => [...t, ...added]);
-    if (problems.length) setError(problems.join(" "));
-    setBusy(false);
-  }
-
-  /** Games the club already saved from the Analyze tab: same tables, same parser as an uploaded spreadsheet. */
-  async function addSaved() {
-    setError(null);
-    setBusy(true);
-    try {
-      const results = await Promise.all((["basketball", "lacrosse"] as const).map((sp) => api<{ tabs: RawTab[]; games: number }>(`/api/games/results?sport=${sp}`)));
-      const added = results.flatMap((r) => r.tabs);
-      if (added.length === 0) setError("No saved games yet. Finish and save a game from the Analyze tab first.");
-      else {
-        setTabs((t) => [...t, ...added]);
-        setSavedLoaded(true);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't load the saved games.");
-    }
-    setBusy(false);
-  }
-
-  function addPaste() {
-    if (!pasteName.trim() || !pasteText.trim()) {
-      setError("Give the pasted tab a game name (the tab's name in Sheets) and paste its cells.");
-      return;
-    }
-    setTabs((t) => [...t, { file: "Pasted", name: pasteName.trim(), rows: parseDelimited(pasteText) }]);
-    setPasteName("");
-    setPasteText("");
-    setError(null);
-  }
-
-  function onDrop(e: DragEvent) {
-    e.preventDefault();
-    setOver(false);
-    void addFiles(e.dataTransfer.files);
-  }
-
-  const loadedDemo = demo && tabs.length > 0;
-
   return (
     <div className="space-y-10">
-      {tabs.length === 0 ? (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={onDrop}
-          className={`flex flex-col items-center justify-center rounded-[0.875rem] border border-dashed px-6 py-14 text-center ${over ? "border-accent bg-surface" : "border-border-strong"}`}
-        >
-          <p className="text-lg font-medium">Add the club&apos;s finished spreadsheets</p>
-          <p className="mt-1 max-w-[32rem] text-muted">
-            In Google Sheets: File → Download → Microsoft Excel (.xlsx). Each tab is one game. Add as many spreadsheets as you have; games are matched by tab name. Files stay on
-            this computer.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
-            {demo ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setTabs(demoTabs ?? []);
-                  setScores(demoScores ?? {});
-                }}
-              >
-                Load a sample season
-              </button>
-            ) : (
-              <>
-                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void addSaved()}>
-                  {busy ? "Reading…" : "Use saved games"}
-                </button>
-                <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => input.current?.click()}>
-                  Choose spreadsheets
-                </button>
-              </>
-            )}
+      {!loaded ? (
+        <div className="flex flex-col items-center justify-center rounded-[0.875rem] border border-dashed border-border-strong px-6 py-14 text-center">
+          <p className="text-lg font-medium">See how Season trends works</p>
+          <p className="mt-1 max-w-[32rem] text-muted">The real tab reads the games your team has analyzed and saved. Here, load a made-up season to try the screens.</p>
+          <div className="mt-6">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setLoaded(true);
+                setScores(demoScores);
+              }}
+            >
+              Load a sample season
+            </button>
           </div>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          {!demo && (
-            <button type="button" className="btn btn-secondary text-sm" disabled={busy} onClick={() => input.current?.click()}>
-              {busy ? "Reading…" : "Add more spreadsheets"}
-            </button>
-          )}
-          {!demo && !savedLoaded && (
-            <button type="button" className="btn btn-secondary text-sm" disabled={busy} onClick={() => void addSaved()}>
-              Add saved games
-            </button>
-          )}
           <button
             type="button"
             className="btn btn-ghost text-sm"
             onClick={() => {
-              setTabs([]);
+              setLoaded(false);
               setScores({});
-              setSavedLoaded(false);
             }}
           >
             Start over
           </button>
         </div>
       )}
-      <input
-        ref={input}
-        type="file"
-        multiple
-        accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-        className="sr-only"
-        onChange={(e) => {
-          if (e.target.files) void addFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      {!demo && (
-        <details className={tabs.length ? "-mt-6" : ""}>
-          <summary className="cursor-pointer text-sm font-medium text-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-text">Or paste one tab from Google Sheets</summary>
-          <div className="mt-3 grid max-w-2xl gap-3">
-            <label className="block">
-              <span className="label">Game (the tab&apos;s name)</span>
-              <input className="field sm:max-w-sm" value={pasteName} placeholder="e.g. Port Washington 124" onChange={(e) => setPasteName(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="label">Cells (select the whole tab in Sheets, copy, paste here)</span>
-              <textarea className="field min-h-32 font-mono text-sm" value={pasteText} onChange={(e) => setPasteText(e.target.value)} />
-            </label>
-            <button type="button" className="btn btn-secondary w-fit text-sm" onClick={addPaste}>
-              Add this tab
-            </button>
-          </div>
-        </details>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
 
-      {loadedDemo && (
+      {loaded && (
         <p role="status" className="rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
           Simulated season. These games and numbers are made up to show how Season trends works.
         </p>
@@ -266,7 +135,7 @@ export function SeasonTab({ demoTabs, demoScores, demo = false }: { demoTabs?: R
               ))}
             </div>
           )}
-          <SeasonResults games={games.filter((g) => g.sport === sport)} sport={sport} scores={scores} setScores={setScores} demo={demo} />
+          <SeasonResults games={games.filter((g) => g.sport === sport)} sport={sport} scores={scores} setScores={setScores} demo />
         </>
       )}
     </div>
@@ -310,18 +179,21 @@ function WhatWasRead({ read, skipped, games }: { read: ReturnType<typeof readTab
   );
 }
 
-function SeasonResults({
+export function SeasonResults({
   games,
   sport,
   scores,
   setScores,
   demo,
+  readOnlyScores = false,
 }: {
   games: Game[];
   sport: Sport;
   scores: Record<string, Score>;
   setScores: (s: Record<string, Score>) => void;
   demo: boolean;
+  /** Stored games carry their typed final scores; they are changed by editing the game, not here. */
+  readOnlyScores?: boolean;
 }) {
   const pairs = useMemo(() => testPairs(games, sport, scores), [games, sport, scores]);
   const ctx = useMemo(() => byContextSeason(games, sport), [games, sport]);
@@ -392,11 +264,17 @@ function SeasonResults({
             <p className="mt-0.5 text-2xl font-semibold tabular-nums">{fmt(avg)}</p>
           </div>
         </div>
-        <ScoreEntry games={games} scores={scores} setScores={setScores} />
+        {readOnlyScores ? (
+          <p className="mt-3 text-sm text-muted tabular-nums">
+            {withScores.length} of {games.length} game{games.length === 1 ? "" : "s"} have a final score. Add one by opening the game in Analyze and saving it with a score.
+          </p>
+        ) : (
+          <ScoreEntry games={games} scores={scores} setScores={setScores} />
+        )}
       </section>
 
       {games.length < 3 ? (
-        <p className="text-muted">Add at least 3 games to see comparisons. Trends need {MIN_GAMES}.</p>
+        <p className="text-muted tabular-nums">Not enough data yet: {games.length} game{games.length === 1 ? "" : "s"} so far. Comparisons need at least 3 games, and trends need {MIN_GAMES}.</p>
       ) : (
         <>
           <section>
@@ -421,7 +299,7 @@ function SeasonResults({
           {linePoints.length >= 3 && (
             <section>
               <h2 className="text-xl font-semibold tracking-[-0.01em]">{lineLabel}, game by game</h2>
-              <p className="mt-1 text-sm text-muted">In the order the tabs were added. Hover a point for the game.</p>
+              <p className="mt-1 text-sm text-muted">In game order. Hover a point for the game.</p>
               <div className="mt-4">
                 <LineChart label={`${lineLabel} in each game`} reference={avg === null ? undefined : { value: avg, label: `Season avg ${avg.toFixed(1)}` }} points={linePoints} />
               </div>
