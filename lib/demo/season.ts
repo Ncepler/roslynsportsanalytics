@@ -1,13 +1,16 @@
 // SIMULATION ONLY (the /test page). A made-up season, written as rows in the
 // club's own sheet layouts, so the /test Season tab runs through exactly the
 // same parser and math as the real one. Never used on the real Season tab.
+// One team only, like the real tab: Season trends is always one team (so one sport) for one season.
+
+export const DEMO_TEAM = "Boys Varsity Basketball";
+export const DEMO_SEASON = "2026-27";
 
 import { gameKey, type RawTab } from "@/lib/season/parse";
 import type { Score } from "@/lib/season/model";
 import type { GameExtras, SourceTotals, TeamExtras } from "@/lib/season/extras";
 
 const BB_OPPONENTS = ["Northfield", "Bayview", "Glen Hollow", "Cedar Park", "Harbor Point", "Westbrook", "Maple Ridge", "Lakeside", "Oak Valley", "Pine Hill", "Riverton", "Stonegate", "Summit Heights", "Elm Grove", "Fairhaven", "Brookside", "Kingsley", "Willow Creek"];
-const LAX_OPPONENTS = ["Northfield", "Bayview", "Cedar Park", "Harbor Point", "Westbrook", "Lakeside", "Oak Valley", "Riverton", "Stonegate", "Elm Grove", "Fairhaven", "Kingsley"];
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -129,42 +132,6 @@ export function simulateSeasonTabs(): { tabs: RawTab[]; scores: Record<string, S
       ],
     };
     extras[gameKey(name)] = { roslyn: roslynX, opponent: oppX, sources: { roslyn: roslynSources, opponent: oppSources } };
-  });
-
-  LAX_OPPONENTS.forEach((opp, i) => {
-    const name = `${opp} lax ${i + 1}`;
-    const tovR = [between(1, 5), between(1, 5), between(1, 5), between(1, 5)];
-    const tovO = [between(1, 5), between(1, 5), between(1, 5), between(1, 5)];
-    tabs.push({
-      file: "Simulated lacrosse turnovers.xlsx",
-      name,
-      rows: [
-        [null, "Q1", "Q2", "Q3", "Q4", "Total turnovers"],
-        ["Roslyn", ...tovR, tovR.reduce((a, b) => a + b, 0)],
-        [opp, ...tovO, tovO.reduce((a, b) => a + b, 0)],
-      ],
-    });
-    const def = (lo: number, hi: number, rate: number) => {
-      const p = between(lo, hi);
-      const g = Math.round(p * (rate + rand() * 0.12));
-      return [p, p - g, g];
-    };
-    const [mP, mN, mG] = def(14, 24, 0.18);
-    const [zP, zN, zG] = def(5, 12, 0.22);
-    const [fP, fN, fG] = def(3, 8, 0.38);
-    tabs.push({
-      file: "Simulated lacrosse defense.xlsx",
-      name,
-      rows: [
-        ["Defensive Possession #", null, "Possession Result", null, "Efficiency", "Total Efficiency"],
-        [null, null, "No Goal", "Goal", null, null],
-        [mP, "M", mN, mG, null, null],
-        [zP, "Z", zN, zG, null, null],
-        [fP, "F", fN, fG, null, null],
-      ],
-    });
-    const allowed = mG + zG + fG;
-    scores[gameKey(name)] = { roslyn: Math.max(2, Math.round(allowed + 3 - tovR.reduce((a, b) => a + b, 0) * 0.4 + (rand() - 0.5) * 6)), opponent: allowed };
   });
 
   return { tabs, scores, extras };

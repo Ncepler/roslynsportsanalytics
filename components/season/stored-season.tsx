@@ -18,7 +18,7 @@ export function StoredSeason({ data }: { data: StoredSeasonData }) {
   if (data.games.length === 0) {
     return (
       <p className="rounded-[0.75rem] border border-border bg-surface-sunken px-5 py-8 text-center text-muted">
-        No analyzed games in {data.seasonLabel} yet. Analyze a game and save it, and it appears here automatically.
+        No analyzed games in {data.seasonLabel} yet.
       </p>
     );
   }

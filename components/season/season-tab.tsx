@@ -8,7 +8,6 @@ import {
   buildGames,
   byContextSeason,
   efficiencyOf,
-  sheetSummary,
   testPairs,
   totalPoints,
   totalPossessions,
@@ -18,6 +17,7 @@ import {
   type Score,
   type Sport,
 } from "@/lib/season/model";
+import { DEMO_SEASON, DEMO_TEAM } from "@/lib/demo/season";
 import { readTabs, type RawTab } from "@/lib/season/parse";
 import { fitLine, MIN_ABS_R, MIN_GAMES, strength } from "@/lib/season/stats";
 import type { SummaryInput } from "@/lib/season/summary";
@@ -29,7 +29,6 @@ import { ColumnChart, LineChart, ScatterChart } from "./charts";
 
 const CONTEXT_NAME = { M: "vs man (M)", Z: "vs zone (Z)", F: "fast break (F)" } as const;
 const fmt = (v: number | null, d = 1) => (v === null ? "–" : v.toFixed(d));
-const sportLabel = (s: Sport) => (s === "basketball" ? "Basketball" : "Lacrosse");
 
 function TableToggle({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
   return (
@@ -70,20 +69,19 @@ const trendTitle = (p: PairResult) => `${outcomeWords(p.y.label)} ${strength(p.r
 export function SeasonTab({ demoTabs, demoScores, demoExtras }: { demoTabs: RawTab[]; demoScores: Record<string, Score>; demoExtras?: Record<string, GameExtras> }) {
   const [loaded, setLoaded] = useState(false);
   const [scores, setScores] = useState<Record<string, Score>>({});
-  const [sportChoice, setSportChoice] = useState<Sport | null>(null);
   const tabs = useMemo(() => (loaded ? demoTabs : []), [loaded, demoTabs]);
 
-  const { read, skipped } = useMemo(() => readTabs(tabs), [tabs]);
-  const games = useMemo(() => buildGames(read).map((g) => ({ ...g, extras: demoExtras?.[g.key] ?? null })), [read, demoExtras]);
-  const sports = [...new Set(games.map((g) => g.sport))];
-  const sport: Sport | null = sportChoice && sports.includes(sportChoice) ? sportChoice : (sports[0] ?? null);
+  // Like the real tab, one team for one season: one sport, never a mix.
+  const sport: Sport = "basketball";
+  const { read } = useMemo(() => readTabs(tabs), [tabs]);
+  const games = useMemo(() => buildGames(read).filter((g) => g.sport === sport).map((g) => ({ ...g, extras: demoExtras?.[g.key] ?? null })), [read, demoExtras]);
 
   return (
     <div className="space-y-10">
       {!loaded ? (
         <div className="flex flex-col items-center justify-center rounded-[0.875rem] border border-dashed border-border-strong px-6 py-14 text-center">
           <p className="text-lg font-medium">See how Season trends works</p>
-          <p className="mt-1 max-w-[32rem] text-muted">The real tab reads the games your team has analyzed and saved. Here, load a made-up season to try the screens.</p>
+          <p className="mt-1 max-w-[32rem] text-muted">The real tab shows one team at a time: every game that team has analyzed and saved this season. Here, load a made-up season for one team to try the screens.</p>
           <div className="mt-6">
             <button
               type="button"
@@ -118,67 +116,17 @@ export function SeasonTab({ demoTabs, demoScores, demoExtras }: { demoTabs: RawT
         </p>
       )}
 
-      {tabs.length > 0 && <WhatWasRead read={read} skipped={skipped} games={games} />}
-
-      {sport && (
-        <>
-          {sports.length > 1 && (
-            <div role="tablist" aria-label="Sport" className="inline-flex rounded-[0.75rem] bg-surface-sunken p-1">
-              {sports.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="tab"
-                  aria-selected={s === sport}
-                  onClick={() => setSportChoice(s)}
-                  className={`min-h-10 rounded-[0.5rem] px-4 text-[0.9375rem] font-medium ${s === sport ? "bg-surface shadow-[0_1px_2px_oklch(0_0_0/0.08)]" : "text-muted"}`}
-                >
-                  {sportLabel(s)}
-                </button>
-              ))}
-            </div>
-          )}
-          <SeasonResults games={games.filter((g) => g.sport === sport)} sport={sport} scores={scores} setScores={setScores} demo />
-        </>
+      {loaded && (
+        <section>
+          <h2 className="text-xl font-semibold tracking-[-0.01em]">Games included</h2>
+          <p className="mt-1 text-sm text-muted tabular-nums">
+            {DEMO_TEAM} (simulated) · {games.length} saved game{games.length === 1 ? "" : "s"} in {DEMO_SEASON}. Every saved game is included automatically.
+          </p>
+        </section>
       )}
+
+      {games.length > 0 && <SeasonResults games={games} sport={sport} scores={scores} setScores={setScores} demo />}
     </div>
-  );
-}
-
-function WhatWasRead({ read, skipped, games }: { read: ReturnType<typeof readTabs>["read"]; skipped: ReturnType<typeof readTabs>["skipped"]; games: Game[] }) {
-  const s = sheetSummary(read, skipped);
-  return (
-    <section>
-      <h2 className="text-xl font-semibold tracking-[-0.01em]">What was read</h2>
-      <ul className="mt-3 space-y-1 text-[0.9375rem]">
-        {s.recognized.map((r) => (
-          <li key={r.kind}>
-            <span className="font-medium">{r.label}</span>{" "}
-            <span className="text-muted tabular-nums">
-              · {r.tabs} tab{r.tabs === 1 ? "" : "s"}
-            </span>
-          </li>
-        ))}
-        {s.recognized.length === 0 && <li className="text-muted">No tabs matched a club sheet yet.</li>}
-      </ul>
-      <p className="mt-2 text-sm text-muted tabular-nums">
-        {games.length} game{games.length === 1 ? "" : "s"} after matching tabs by name.
-      </p>
-      {skipped.length > 0 && (
-        <details className="mt-2 text-sm">
-          <summary className="cursor-pointer text-muted">
-            Skipped {skipped.length} tab{skipped.length === 1 ? "" : "s"}
-          </summary>
-          <ul className="mt-1 space-y-0.5 text-muted">
-            {skipped.map((t, i) => (
-              <li key={i}>
-                &quot;{t.name}&quot; in {t.file}: {t.reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
   );
 }
 
