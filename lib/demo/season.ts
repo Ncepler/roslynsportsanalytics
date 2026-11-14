@@ -4,6 +4,7 @@
 
 import { gameKey, type RawTab } from "@/lib/season/parse";
 import type { Score } from "@/lib/season/model";
+import type { GameExtras, SourceTotals, TeamExtras } from "@/lib/season/extras";
 
 const BB_OPPONENTS = ["Northfield", "Bayview", "Glen Hollow", "Cedar Park", "Harbor Point", "Westbrook", "Maple Ridge", "Lakeside", "Oak Valley", "Pine Hill", "Riverton", "Stonegate", "Summit Heights", "Elm Grove", "Fairhaven", "Brookside", "Kingsley", "Willow Creek"];
 const LAX_OPPONENTS = ["Northfield", "Bayview", "Cedar Park", "Harbor Point", "Westbrook", "Lakeside", "Oak Valley", "Riverton", "Stonegate", "Elm Grove", "Fairhaven", "Kingsley"];
@@ -19,11 +20,12 @@ function rng(seed: number) {
   };
 }
 
-export function simulateSeasonTabs(): { tabs: RawTab[]; scores: Record<string, Score> } {
+export function simulateSeasonTabs(): { tabs: RawTab[]; scores: Record<string, Score>; extras: Record<string, GameExtras> } {
   const rand = rng(2026);
   const between = (lo: number, hi: number) => Math.round(lo + rand() * (hi - lo));
   const tabs: RawTab[] = [];
   const scores: Record<string, Score> = {};
+  const extras: Record<string, GameExtras> = {};
 
   BB_OPPONENTS.forEach((opp, i) => {
     const name = `${opp} ${101 + i * 3}`;
@@ -51,7 +53,82 @@ export function simulateSeasonTabs(): { tabs: RawTab[]; scores: Record<string, S
     const pts = (r: (string | number | null)[]) => 2 * (r[3] as number) + 3 * (r[5] as number) + (r[7] as number);
     const ours = pts(rows[2]) + pts(rows[3]) + pts(rows[4]);
     const tov = (rows[2][13] as number) + (rows[3][13] as number) + (rows[4][13] as number);
-    scores[gameKey(name)] = { roslyn: ours, opponent: Math.max(25, Math.round(ours + 4 - poss.F * 0.6 + (tov - 16) * 0.8 + (rand() - 0.5) * 12)) };
+    const oppScore = Math.max(25, Math.round(ours + 4 - poss.F * 0.6 + (tov - 16) * 0.8 + (rand() - 0.5) * 12));
+    scores[gameKey(name)] = { roslyn: ours, opponent: oppScore };
+
+    // Made-up extra numbers (SIMULATION), consistent with the rows above, so the extra Season stats and the
+    // "what has worked" section have something to show on /test.
+    const num = (i: number) => [2, 3, 4].reduce((a, r) => a + (rows[r][i] as number), 0);
+    const fga = num(2) + num(4);
+    const fgm = num(3) + num(5);
+    const paintPts = Math.round(ours * (0.34 + rand() * 0.1));
+    const potPts = between(4, 18) + Math.round(Math.max(0, 16 - tov));
+    const secondPts = between(2, 12);
+    const fbPts = pts(rows[4]);
+    const roslynX: TeamExtras = {
+      points: ours,
+      possessions: poss.M + poss.Z + poss.F,
+      fgPct: (fgm / fga) * 100,
+      efgPct: ((fgm + 0.5 * num(5)) / fga) * 100,
+      fg3Pct: num(4) ? (num(5) / num(4)) * 100 : null,
+      ftPct: num(6) ? (num(7) / num(6)) * 100 : null,
+      tovRate: (tov / (poss.M + poss.Z + poss.F)) * 100,
+      turnovers: tov,
+      pointsOffTurnovers: potPts,
+      secondChance: secondPts,
+      fastBreakPoints: fbPts,
+      paintPoints: paintPts,
+      shotsTaken: fga,
+      assists: num(10),
+      steals: num(11),
+      blocks: num(12),
+      fouls: num(14),
+    };
+    const oppPaint = between(12, 30);
+    const oppX: TeamExtras = {
+      points: oppScore,
+      possessions: poss.M + poss.Z + poss.F,
+      fgPct: between(36, 52),
+      efgPct: between(40, 56),
+      fg3Pct: between(24, 40),
+      ftPct: between(55, 80),
+      tovRate: between(12, 24),
+      turnovers: between(8, 16),
+      pointsOffTurnovers: between(4, 16),
+      secondChance: between(2, 12),
+      fastBreakPoints: between(2, 14),
+      paintPoints: oppPaint,
+      shotsTaken: between(48, 66),
+      assists: between(8, 18),
+      steals: between(2, 9),
+      blocks: between(0, 5),
+      fouls: between(8, 20),
+    };
+    const ctxPts = (r: (string | number | null)[]) => pts(r);
+    const roslynSources: SourceTotals = {
+      total: ours,
+      items: [
+        { id: "context-M", label: "possessions against man-to-man defense", points: ctxPts(rows[2]) },
+        { id: "context-Z", label: "possessions against zone defense", points: ctxPts(rows[3]) },
+        { id: "context-F", label: "fast breaks", points: fbPts },
+        { id: "off-turnovers", label: "points off turnovers", points: potPts },
+        { id: "second-chance", label: "second-chance points", points: secondPts },
+        { id: "paint", label: "shots in the paint", points: paintPts },
+        { id: "threes", label: "3-point shots", points: 3 * num(5) },
+        { id: "free-throws", label: "free throws", points: num(7) },
+      ],
+    };
+    const oppSources: SourceTotals = {
+      total: oppScore,
+      items: [
+        { id: "paint", label: "shots in the paint", points: oppPaint },
+        { id: "threes", label: "3-point shots", points: 3 * between(4, 10) },
+        { id: "free-throws", label: "free throws", points: between(4, 14) },
+        { id: "off-turnovers", label: "points off turnovers", points: oppX.pointsOffTurnovers! },
+        { id: "context-F", label: "fast breaks", points: oppX.fastBreakPoints! },
+      ],
+    };
+    extras[gameKey(name)] = { roslyn: roslynX, opponent: oppX, sources: { roslyn: roslynSources, opponent: oppSources } };
   });
 
   LAX_OPPONENTS.forEach((opp, i) => {
@@ -90,5 +167,5 @@ export function simulateSeasonTabs(): { tabs: RawTab[]; scores: Record<string, S
     scores[gameKey(name)] = { roslyn: Math.max(2, Math.round(allowed + 3 - tovR.reduce((a, b) => a + b, 0) * 0.4 + (rand() - 0.5) * 6)), opponent: allowed };
   });
 
-  return { tabs, scores };
+  return { tabs, scores, extras };
 }

@@ -67,14 +67,14 @@ const outcomeWords = (label: string) => label.replace(/ \(%\)$/, "");
 const trendTitle = (p: PairResult) => `${outcomeWords(p.y.label)} ${strength(p.r!)} ${outcomeWords(p.x.label).toLowerCase()}`;
 
 /** The simulated Season trends (/test/season): made-up games shown through the real screens. The real tab is StoredSeason. */
-export function SeasonTab({ demoTabs, demoScores }: { demoTabs: RawTab[]; demoScores: Record<string, Score> }) {
+export function SeasonTab({ demoTabs, demoScores, demoExtras }: { demoTabs: RawTab[]; demoScores: Record<string, Score>; demoExtras?: Record<string, GameExtras> }) {
   const [loaded, setLoaded] = useState(false);
   const [scores, setScores] = useState<Record<string, Score>>({});
   const [sportChoice, setSportChoice] = useState<Sport | null>(null);
   const tabs = useMemo(() => (loaded ? demoTabs : []), [loaded, demoTabs]);
 
   const { read, skipped } = useMemo(() => readTabs(tabs), [tabs]);
-  const games = useMemo(() => buildGames(read), [read]);
+  const games = useMemo(() => buildGames(read).map((g) => ({ ...g, extras: demoExtras?.[g.key] ?? null })), [read, demoExtras]);
   const sports = [...new Set(games.map((g) => g.sport))];
   const sport: Sport | null = sportChoice && sports.includes(sportChoice) ? sportChoice : (sports[0] ?? null);
 

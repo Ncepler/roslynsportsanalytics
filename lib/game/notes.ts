@@ -72,6 +72,7 @@ export function notesPrompt(input: GameNotesInput): string {
     "",
     "Number rules:",
     "- Quote only numbers that appear in the data below. Do not add, subtract, average, round differently, or estimate anything new. If you want a number that is not there, leave it out.",
+    "- For turnovers and fouls, a lower number is better; do not describe a higher count as an advantage.",
     '- "sources" lists where each team\'s points came from, with sharePercent of that team\'s total. Use it for statements like "The opponent scored 65% of its points on X". Only mention sources that are listed; listed items already meet a minimum sample size.',
     '- Do not mention anything the data does not cover (individual players, strategy names, coaching decisions).',
     "- If the data is too thin for a section, return fewer notes (or an empty list) instead of padding.",

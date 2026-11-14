@@ -66,7 +66,7 @@ function SourceBars({ team, name, items, total }: { team: "a" | "b"; name: strin
           {items.map((s) => (
             <li key={s.id}>
               <div className="flex items-baseline justify-between gap-3 tabular-nums">
-                <span className="text-[0.9375rem] font-semibold capitalize">{s.label}</span>
+                <span className="text-[0.9375rem] font-semibold first-letter:uppercase">{s.label}</span>
                 <span className="text-sm">
                   <span className="text-[1.125rem] font-bold">{Math.round(s.share * 100)}%</span> <span className="text-muted">({s.points} pts)</span>
                 </span>
