@@ -19,7 +19,7 @@ const FLOW = [
   { who: "Temporary Vercel storage", what: "Holds the video for the few minutes it takes to hand it to the AI, then deletes it. Leftovers are swept after an hour.", keeps: "Deleted in minutes" },
   { who: "Google Gemini (watches the video)", what: "Watches the video and writes a log of what happened. The video is deleted from Gemini as soon as the run ends.", keeps: "Deleted right after (auto-delete at 48 h at the latest)" },
   { who: "Anthropic Claude (Season tab only)", what: "Receives only numbers the code already calculated (like points per possession by game). It never sees video, faces, or player names.", keeps: "Numbers only" },
-  { who: "Private Vercel storage", what: "Keeps the schedule, who is analyzing which game, and each finished game's tables.", keeps: "Numbers and team names only" },
+  { who: "The club's Supabase database", what: "Keeps the teams, seasons, schedules and each reviewed game log (one row per possession: counts, clock readings and jersey numbers). Tables, totals and trends are worked out from the log whenever they are shown.", keeps: "Numbers and team names only, until an admin deletes them" },
 ];
 
 export default function BreakdownPage() {
@@ -37,17 +37,17 @@ export default function BreakdownPage() {
             <li>The game video. It is passed through for the analysis, then deleted.</li>
             <li>Face data of any kind. There is no face recognition and no reference photos are sent.</li>
             <li>Appearance notes (&ldquo;#5, white jersey, headband&rdquo;). They exist for one run, then are discarded.</li>
-            <li>The AI&apos;s descriptions of what it saw.</li>
+            <li>The AI&apos;s play-by-play descriptions of what it saw. (A short note on a whole possession is kept.)</li>
             <li>Student names. The app only uses jersey numbers, and tracker names are never entered.</li>
           </ul>
         </Card>
         <Card title="What is stored">
           <ul className="list-disc space-y-1 pl-5">
-            <li>The game schedule: opponent name and date.</li>
-            <li>Whether a game is being analyzed or is finished.</li>
-            <li>Each finished game&apos;s tables: counts like shots, makes, turnovers and points, plus jersey numbers such as #23.</li>
+            <li>Teams, seasons, opponent names and the game schedule (date, home or away, location).</li>
+            <li>Whether a game is scheduled or analyzed, and a final score if a member typed one.</li>
+            <li>Each analyzed game&apos;s log, one row per possession: shots and makes, turnovers, fouls, clock readings and jersey numbers such as #23. Totals and percentages are never stored; they are calculated each time.</li>
           </ul>
-          <p>These are small text files in a private Vercel Blob store. There is no database. A saved result over 500 KB is refused.</p>
+          <p>These live in a Supabase database that belongs to the club. Only the app&apos;s server can read it, and an admin can download or delete everything.</p>
         </Card>
       </div>
 
@@ -69,7 +69,7 @@ export default function BreakdownPage() {
         <Card title="Who can get in">
           <p>Every page and every data request sits behind a password. Without the sign-in cookie, the server refuses the request.</p>
           <p>Analyzing a game is limited to Roslyn games: a check on the video must see an organized game and read &ldquo;Roslyn&rdquo; before the main analysis runs, and there is no override for members.</p>
-          <p>Each scheduled game can be analyzed by one person at a time, and once finished it is locked.</p>
+          <p>There are three kinds of sign-in. The demo sign-in only shows made-up sample data and cannot read the database or use the AI. Members (the club password) can view and analyze games. Admins (a separate password) can also manage teams, seasons and schedules.</p>
         </Card>
         <Card title="How it is not leaked">
           <ul className="list-disc space-y-1 pl-5">
