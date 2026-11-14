@@ -5,7 +5,7 @@ import { TestTabs } from "@/components/analyze/test-tabs";
 export const metadata: Metadata = { title: "Simulation · Roslyn Film Analyzer" };
 
 // Shared frame for /test and /test/season: a walkthrough with a simulated backend.
-// No upload, no Gemini, no Claude, no cost. All game data is made up.
+// No upload, no AI, no cost. All game data is made up.
 export default function TestLayout({ children }: { children: React.ReactNode }) {
   return (
     <section>

@@ -18,7 +18,7 @@ const FLOW = [
   { who: "Your browser", what: "Plays the video from your own computer. Nothing leaves until you press Analyze.", keeps: "Nothing saved" },
   { who: "Temporary Vercel storage", what: "Holds the video for the few minutes it takes to hand it to the AI, then deletes it. Leftovers are swept after an hour.", keeps: "Deleted in minutes" },
   { who: "Google Gemini (watches the video)", what: "Watches the video and writes a log of what happened. The video is deleted from Gemini as soon as the run ends.", keeps: "Deleted right after (auto-delete at 48 h at the latest)" },
-  { who: "Anthropic Claude (Season tab only)", what: "Receives only numbers the code already calculated (like points per possession by game). It never sees video, faces, or player names.", keeps: "Numbers only" },
+  { who: "Google Gemini again (Season summary only)", what: "Receives only numbers the code already calculated (like points per possession by game) and writes a short plain-English summary. It never sees video, faces, or player names.", keeps: "Numbers only" },
   { who: "The club's Supabase database", what: "Keeps the teams, seasons, schedules and each reviewed game log (one row per possession: counts, clock readings and jersey numbers). Tables, totals and trends are worked out from the log whenever they are shown.", keeps: "Numbers and team names only, until an admin deletes them" },
 ];
 

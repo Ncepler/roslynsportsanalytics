@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.6.0",
     "@google/genai": "^3.0.0",
     "@supabase/supabase-js": "^2.119.0",
     "@vercel/blob": "^2.9.0",

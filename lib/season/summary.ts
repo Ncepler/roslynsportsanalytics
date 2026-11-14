@@ -1,4 +1,4 @@
-// What the Season tab sends to Claude: only numbers the code computed
+// What the Season tab sends to Gemini: only numbers the code computed
 // (CLAUDE.md sections 3 rule 8, and 13). Shared by the client (to build it)
 // and the server route (to check the reply against it).
 

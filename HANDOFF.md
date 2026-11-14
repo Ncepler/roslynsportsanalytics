@@ -28,8 +28,7 @@ Everything below should belong to a **club account** (a club-named email), with 
 | Supabase | The database (teams, schedules, saved game logs) | supabase.com, club project | Club account; members invited. **Already set up this way.** |
 | Vercel | Hosts the website; holds the secret settings | vercel.com | Club account (move it from a personal account when ready) |
 | GitHub | Holds the code | github.com | Club account or organization (move it from a personal account when ready) |
-| Google AI Studio | Gemini, the AI that watches video. Billing lives here. | aistudio.google.com | Club account for the key; see "Gemini billing" |
-| Anthropic Console | Claude, the AI that writes the Season summary | console.anthropic.com | Club account |
+| Google AI Studio | Gemini, the only AI the site uses: it watches video and writes the Season summary. Billing lives here. | aistudio.google.com | Club account for the key; see "Gemini billing" |
 | Hudl | Where the school's game footage is. The app never touches Hudl. A coach or athletic director downloads games and shares the files. | hudl.com | The school |
 
 **Where the club email's recovery and 2-step sign-in details are kept:** _(fill this in: for example "in the advisor's school password manager, and printed in the sealed envelope in room ___". Do not write the codes here.)_
@@ -45,11 +44,9 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | `CLUB_PASSWORD` | The member password | You choose it |
 | `ADMIN_PASSWORD` | The admin password (must differ from the club password) | You choose it |
 | `SESSION_SECRET` | Random text that makes sign-ins tamper-proof (32+ characters) | Any password generator, or `openssl rand -base64 32` |
-| `GEMINI_API_KEY` | Lets the site use Gemini | aistudio.google.com/apikey |
-| `GEMINI_MODEL` | Which Gemini model to use | Google's model list |
+| `GEMINI_API_KEY` | Lets the site use Gemini (video analysis and the Season summary) | aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Which Gemini model to use (for everything) | Google's model list |
 | `GEMINI_TIER` | `free` or `paid`. `free` shows a banner "don't upload student footage". Switch to `paid` only once billing is set up. | You set it |
-| `ANTHROPIC_API_KEY` | Lets the site write the Season summary | console.anthropic.com |
-| `CLAUDE_MODEL` | Which Claude model to use | Anthropic's model list |
 | `ALLOW_TEST_LOGIN` | `true` shows the Test button, which signs anyone in without a password (as the role in `TEST_LOGIN_ROLE`). Use it only until the real passwords are set, then set it to `false`. | You set it |
 | `ADMIN_BYPASS_CODE` | Secret code for the owner test. Leave empty to turn that feature off. | You choose it |
 | `BLOB_READ_WRITE_TOKEN` (or `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`) | Added by Vercel when you connect a Blob store. Used only for the few minutes a video is handed to Gemini. | Vercel → Storage |

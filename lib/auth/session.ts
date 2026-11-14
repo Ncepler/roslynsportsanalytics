@@ -23,7 +23,7 @@ export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
 
-/** Can this role use the real site (database, Gemini, Claude)? Demo cannot. */
+/** Can this role use the real site (database, Gemini)? Demo cannot. */
 export const canUseSite = (role: Role | null): boolean => role === "member" || role === "admin";
 export const isAdminRole = (role: Role | null): boolean => role === "admin";
 

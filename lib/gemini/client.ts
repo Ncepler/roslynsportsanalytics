@@ -85,6 +85,18 @@ export async function countVideoTokens(opts: { uri: string; mimeType: string; st
   return res.totalTokens ?? null;
 }
 
+/** One short, text-only request that must answer in JSON matching `schema` (no video, nothing stored by Gemini). */
+export async function generateJson(opts: { prompt: string; schema: Record<string, unknown>; temperature?: number }): Promise<string> {
+  const interaction = await gemini().interactions.create({
+    model: geminiModel(),
+    store: false,
+    input: [{ type: "text", text: opts.prompt }],
+    generation_config: { temperature: opts.temperature ?? 0.2 },
+    response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
+  });
+  return interaction.output_text ?? "";
+}
+
 /** Starts a background analysis; returns the interaction id to poll. */
 export async function startVideoInteraction(opts: {
   uri: string;

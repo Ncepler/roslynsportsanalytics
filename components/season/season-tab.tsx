@@ -458,7 +458,7 @@ function Summary({ input, demo, passing }: { input: SummaryInput; demo: boolean;
     }
     setState({ status: "loading" });
     try {
-      const r = await api<{ summary: string; hypotheses: string[]; removed: number }>("/api/claude/season", { body: input });
+      const r = await api<{ summary: string; hypotheses: string[]; removed: number }>("/api/season/summary", { body: input });
       setState({ status: "done", ...r });
     } catch (err) {
       setState({ status: "error", error: err instanceof ApiError ? err.message : "The AI summary failed." });
