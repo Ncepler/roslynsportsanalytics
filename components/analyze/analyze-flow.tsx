@@ -50,7 +50,7 @@ const basketballDefaults = (): GameSetup => ({
 export type TeamContext = {
   id: string;
   slug: string;
-  sport: "basketball" | "lacrosse";
+  sport: "basketball" | "lacrosse" | "ice-hockey";
   scheduled: PickableGame[];
   analyzed: PickableGame[];
   opponents: string[];
@@ -470,7 +470,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       {game && (
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="font-medium">
-            {team?.sport === "lacrosse" ? "Lacrosse" : "Basketball"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
+            {SPORTS[team?.sport ?? "basketball"]?.label ?? "Game"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
           </span>
           {!saved && (
             <button type="button" className="btn btn-ghost min-h-9 px-2 text-sm" onClick={changeGame}>

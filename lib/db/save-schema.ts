@@ -25,6 +25,7 @@ const event = z.object({
   made: z.boolean().nullish(),
   shotType: z.string().max(40).nullish(),
   shotZone: z.string().max(40).nullish(),
+  shotResult: z.enum(["goal", "saved", "missed", "blocked"]).nullish(),
   contested: z.boolean().nullish(),
   reboundType: z.enum(["offensive", "defensive"]).nullish(),
   turnoverType: z.string().max(40).nullish(),

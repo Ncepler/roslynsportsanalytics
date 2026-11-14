@@ -7,7 +7,7 @@ export type Tier = "reliable" | "decent" | "experimental";
 export type EventType = "shot" | "rebound" | "assist" | "steal" | "block" | "turnover" | "foul" | "substitution";
 
 /** Optional event fields the AI fills only when a stat that needs them is checked. */
-export type EventField = "player" | "shotType" | "shotZone" | "turnoverType" | "contested";
+export type EventField = "player" | "shotType" | "shotZone" | "turnoverType" | "contested" | "shotResult";
 
 export type StatDef = {
   id: string;
@@ -40,7 +40,7 @@ export type SportConfig = {
   /** Players on the field or court per team (how many appearance notes to ask for). */
   playersPerSide: number;
   /** "court" or "field", used in prompts. */
-  surface: "court" | "field";
+  surface: "court" | "field" | "rink";
   /** Allowed point values for a scoring shot (1 = free throw in basketball; a lacrosse goal is 1). */
   shotPoints: number[];
   /** How the AI should fill a shot's points. */
@@ -49,5 +49,9 @@ export type SportConfig = {
   sheets: string[];
   /** What the AI is told a possession is. */
   possessionDefinition: string;
+  /** What a period is called on screen ("Quarter", "Period"). Defaults to "Quarter". */
+  periodName?: string;
+  /** Where on the surface a shot came from, as named regions (never exact positions). Drives the shot chart and the AI's zone list. */
+  shotZones?: { id: string; label: string }[];
   stats: StatDef[];
 };

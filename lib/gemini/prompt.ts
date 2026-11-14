@@ -53,7 +53,7 @@ function eventProperties(sport: SportConfig, events: EventType[], fields: EventF
     clock: nullable("string", { description: 'Game clock on the scoreboard as "M:SS", or null if unreadable.' }),
     player: nullable("string", { description: "Jersey number, or null if unreadable." }),
     points: nullable("integer", { enum: [...sport.shotPoints, null], description: `Shots only. ${sport.shotPointsHelp}` }),
-    made: nullable("boolean", { description: sport.id === "lacrosse" ? "Shots only: true if it was a goal." : "Shots only." }),
+    made: nullable("boolean", { description: sport.id === "lacrosse" || sport.id === "ice-hockey" ? "Shots only: true if it was a goal." : "Shots only." }),
     description: { type: "string", description: "One short line describing what you saw." },
   };
   if (events.includes("substitution")) {
@@ -62,7 +62,8 @@ function eventProperties(sport: SportConfig, events: EventType[], fields: EventF
   }
   if (events.includes("rebound")) eventProps.reboundType = nullable("string", { enum: ["offensive", "defensive", null] });
   if (fields.includes("shotType")) eventProps.shotType = nullable("string", { enum: ["drive", "catch-and-shoot", "pull-up", "post", "putback", "other", null] });
-  if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: ["paint", "mid-range", "corner 3", "above-the-break 3", null] });
+  if (fields.includes("shotZone")) eventProps.shotZone = nullable("string", { enum: [...(sport.shotZones ?? []).map((z) => z.id), null], description: "The named part of the playing surface the shot came from, or null if you cannot tell. Never guess an exact spot." });
+  if (fields.includes("shotResult")) eventProps.shotResult = nullable("string", { enum: ["goal", "saved", "missed", "blocked", null], description: "Shots only: what happened to the shot, or null if not clear." });
   if (fields.includes("turnoverType")) eventProps.turnoverType = nullable("string", { enum: ["steal", "bad pass", "travel", "offensive foul", "out of bounds", "violation", "other", null] });
   if (fields.includes("contested")) eventProps.contested = nullable("boolean");
   return eventProps;
@@ -89,7 +90,7 @@ export function possessionLogSchema(sport: SportConfig, statIds: string[]) {
             clockEnd: nullable("string"),
             videoStart: { type: "number" },
             videoEnd: { type: "number" },
-            context: nullable("string", { enum: ["M", "Z", "F", null] }),
+            context: nullable("string", { enum: ["M", "Z", "F", null], ...(sport.stats.some((s) => s.id === "context") ? {} : { description: "Always null for this sport." }) }),
             events: {
               type: "array",
               items: { type: "object", properties: eventProps, required: EVENT_REQUIRED },
@@ -132,7 +133,7 @@ export function possessionLogPrompt(sport: SportConfig, setup: GameSetup, segmen
   const roster = (label: string, list: string) => (list.trim() ? `${label} jersey numbers: ${list.trim()}.` : "");
 
   return [
-    `You are logging a ${sport.label.toLowerCase()} game from video for a high school stats club. Log what you SEE. Never guess.`,
+    `You are logging ${/^[aeiou]/i.test(sport.label) ? "an" : "a"} ${sport.label.toLowerCase()} game from video for a high school stats club. Log what you SEE. Never guess.`,
     "",
     "Teams:",
     `- "roslyn": Roslyn, wearing ${setup.roslynColor}. ${roster("Roslyn", setup.roslynRoster)}`,

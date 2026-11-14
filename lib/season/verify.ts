@@ -21,7 +21,7 @@ export function allowedNumbers(data: unknown): number[] {
 }
 
 /** Number words that aren't data: "3-pointers", "Q3", "2-point", "M / Z / F" etc. */
-const NON_DATA = [/\bper 100\b/gi, /\b[123]-?(?:point(?:er)?s?|pt|pts)\b/gi, /\b(?:q|quarter )[1-4]\b/gi, /\bthree(?:-point(?:er)?s?)?\b/gi];
+const NON_DATA = [/\bper 100\b/gi, /\b[123]-?(?:point(?:er)?s?|pt|pts)\b/gi, /\b(?:q|quarter )[1-4]\b/gi, /\bthree(?:-point(?:er)?s?)?\b/gi, /\b\d+(?:st|nd|rd|th)\b/gi, /\bp[1-3]\b/gi, /\bperiod [1-3]\b/gi];
 
 /** A written number matches a computed one if it equals it at the precision the writer used. */
 function matches(written: string, allowed: number[]): boolean {

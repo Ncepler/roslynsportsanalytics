@@ -31,7 +31,7 @@ export function gateClips(range: GateRange): GateRange[] {
 export const gateSchema = {
   type: "object",
   properties: {
-    sportSeen: { type: "string", enum: ["basketball", "lacrosse", "other sport", "not a sports game", "unclear"], description: "What is being played in these clips." },
+    sportSeen: { type: "string", enum: ["basketball", "lacrosse", "ice-hockey", "other sport", "not a sports game", "unclear"], description: "What is being played in these clips." },
     isOrganizedGame: { type: "boolean", description: "True only for an organized game between two teams (not practice drills, highlights compilations, video games, or unrelated video)." },
     roslynSeen: { type: "boolean", description: 'True only if you can actually read "Roslyn" (or "ROS" as a team label next to a score) somewhere in the clips.' },
     roslynEvidence: { type: "string", description: 'Exactly where you read it, e.g. "ROSLYN across the home jerseys" or "scoreboard shows ROS 12". Empty if not seen.' },
@@ -63,7 +63,7 @@ export function decideGate(sport: SportConfig, raw: unknown): GateDecision {
   const why = typeof r.reason === "string" && r.reason.trim() ? ` ${r.reason.trim()}` : "";
   if (seen === "not a sports game" || seen === "unclear") return { pass: false, reason: `This doesn't look like a sports game.${why}` };
   if (seen !== sport.id) {
-    const other = seen === "basketball" || seen === "lacrosse" ? `${seen}, not ${sport.label.toLowerCase()}. If that's right, go back and change the sport.` : `${seen}, not ${sport.label.toLowerCase()}.`;
+    const other = seen === "basketball" || seen === "lacrosse" || seen === "ice-hockey" ? `${seen}, not ${sport.label.toLowerCase()}. If that's right, go back and change the sport.` : `${seen}, not ${sport.label.toLowerCase()}.`;
     return { pass: false, reason: `This looks like ${other}${why}` };
   }
   if (r.isOrganizedGame !== true) return { pass: false, reason: `This doesn't look like a full game between two teams.${why}` };

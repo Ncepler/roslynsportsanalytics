@@ -19,6 +19,8 @@ export type LogEvent = {
   made?: boolean | null;
   shotType?: string | null;
   shotZone?: string | null;
+  /** Hockey shots: what happened to the shot. A goal also has made = true. */
+  shotResult?: "goal" | "saved" | "missed" | "blocked" | null;
   contested?: boolean | null;
   /** Rebounds only. */
   reboundType?: "offensive" | "defensive" | null;

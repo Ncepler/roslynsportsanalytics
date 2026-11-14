@@ -7,7 +7,7 @@ import { requireMember } from "@/lib/auth/server";
 import { listSeasons } from "@/lib/db/admin";
 import { getTeamBySlug, tryDb } from "@/lib/db/read";
 import { loadStoredSeason } from "@/lib/db/season";
-import { hasStats } from "@/lib/teams/options";
+import { hasSeason } from "@/lib/teams/options";
 
 export const metadata: Metadata = { title: "Season trends · Roslyn Film Analyzer" };
 
@@ -18,7 +18,7 @@ async function Season({ params, searchParams }: { params: PageProps<"/t/[slug]/s
   const { season: seasonParam } = await searchParams;
   const result = await tryDb(async () => {
     const team = await getTeamBySlug(slug);
-    if (!team || !hasStats(team.sport)) return { team, stored: null, seasons: [], season: null };
+    if (!team || !hasSeason(team.sport)) return { team, stored: null, seasons: [], season: null };
     const seasons = await listSeasons();
     const wanted = typeof seasonParam === "string" ? seasonParam : undefined;
     const season = seasons.find((s) => s.id === wanted) ?? seasons.find((s) => s.is_current) ?? seasons[0] ?? null;
@@ -28,7 +28,7 @@ async function Season({ params, searchParams }: { params: PageProps<"/t/[slug]/s
   if (!result.ok) return <p role="alert" className="text-sm text-warning-text">{result.message}</p>;
   const { team, stored, seasons, season } = result.data;
   if (!team) return null;
-  if (!hasStats(team.sport)) return <NoStats />;
+  if (!hasSeason(team.sport)) return <NoStats title="Season trends for this sport aren't set up yet" detail="Games can still be analyzed and saved." />;
   if (!season || !stored) return <p className="text-muted">No season set up yet.</p>;
 
   return (

@@ -25,6 +25,10 @@
   --accent-hover: oklch(0.45 0.12 var(--accent-hue));
   --accent-fg: oklch(0.99 0 0);
 
+  /* Two-team series colors for the game stats page (Roslyn = team A) */
+  --team-a: var(--accent);
+  --team-b: oklch(0.62 0.15 45);
+
   /* Status */
   --warning-bg: oklch(0.96 0.045 85);
   --warning-text: oklch(0.4 0.08 70);
@@ -62,6 +66,8 @@
     --accent: oklch(0.72 0.11 var(--accent-hue));
     --accent-hover: oklch(0.78 0.1 var(--accent-hue));
     --accent-fg: oklch(0.18 0.02 var(--accent-hue));
+
+    --team-b: oklch(0.76 0.13 50);
 
     --warning-bg: oklch(0.27 0.04 75);
     --warning-text: oklch(0.88 0.08 85);
@@ -113,6 +119,8 @@
   --color-warning-text: var(--warning-text);
   --color-warning-border: var(--warning-border);
   --color-danger: var(--danger);
+  --color-team-a: var(--team-a);
+  --color-team-b: var(--team-b);
 
   --ease-out: var(--ease-out);
   --ease-in-out: var(--ease-in-out);

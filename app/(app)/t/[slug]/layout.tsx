@@ -35,7 +35,7 @@ async function TeamFrame({ params, children }: { params: LayoutProps<"/t/[slug]"
       </div>
       <div className="mt-8">
         {children}
-        {games?.ok && <PersistentAnalyze team={{ id: team.id, slug: team.slug, sport: team.sport as "basketball" | "lacrosse", ...games.data }} />}
+        {games?.ok && <PersistentAnalyze team={{ id: team.id, slug: team.slug, sport: team.sport as "basketball" | "lacrosse" | "ice-hockey", ...games.data }} />}
       </div>
     </section>
   );

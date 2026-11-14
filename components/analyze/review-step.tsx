@@ -1,5 +1,6 @@
 "use client";
 
+import { GameStatsView } from "@/components/game/game-stats-view";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { RunUsage } from "@/lib/client/run";
@@ -64,7 +65,8 @@ export function ReviewStep({
   const away = setup.awayName || "Opponent";
   const checks = useMemo(() => scoreboardCheck(log), [log]);
   const flagged = flaggedQuarters(checks);
-  const lax = setup.sportId === "lacrosse";
+  // Goal sports (lacrosse, hockey) label shots as goals and have no free throws.
+  const lax = setup.sportId !== "basketball";
   const sheets = useMemo(() => allSheets(log, setup.statIds, away, setup.sportId, starters), [log, setup.statIds, away, setup.sportId, starters]);
   const roslyn = summaryByContext(log, "roslyn").total;
   const opp = summaryByContext(log, "opponent").total;
@@ -95,8 +97,13 @@ export function ReviewStep({
       )}
 
       <section>
-        <h2 className="text-xl font-semibold tracking-[-0.01em]">Game numbers</h2>
-        <p className="hint mt-1">Every number is worked out by the app from the possession log below. Fix the log and these update.</p>
+        <h2 className="text-xl font-semibold tracking-[-0.01em]">Game stats</h2>
+        <p className="hint mt-1 mb-4">Every number is worked out by the app from the possession log below. Fix the log and these update.</p>
+        <GameStatsView log={log} sportId={setup.sportId} statIds={setup.statIds} away={away} />
+      </section>
+
+      <details>
+        <summary className="cursor-pointer text-xl font-semibold tracking-[-0.01em]">More numbers</summary>
         <div className="mt-4 grid gap-8 lg:grid-cols-2">
           {on("score-by-quarter") && <QuarterTable title="Score by quarter" data={scoreByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("pace") && <QuarterTable title="Possessions by quarter" data={paceByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
@@ -104,6 +111,7 @@ export function ReviewStep({
           {on("by-quarter") && on("fouls") && <QuarterTable title="Fouls by quarter" data={foulsByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {lax && on("defense") && on("context") && <DefenseTable log={log} />}
           {!lax && (on("plus-minus") || on("minutes")) && <PlusMinusTable log={log} starters={starters} showPm={on("plus-minus")} showMinutes={on("minutes")} />}
+          {!lax && (
           <TeamTable
             away={away}
             rows={[
@@ -119,8 +127,9 @@ export function ReviewStep({
               on("fast-break-points") && ["Fast-break points", fastBreakPoints(log, "roslyn"), fastBreakPoints(log, "opponent")],
             ]}
           />
+          )}
         </div>
-      </section>
+      </details>
 
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Possession log</h2>
@@ -450,6 +459,7 @@ function TeamTable({ rows, away }: { rows: (false | [string, string | number, st
 }
 
 function eventLabel(e: LogEvent, lax = false): string {
+  if (e.type === "shot" && e.shotResult) return `Shot: ${e.shotResult}`;
   if (e.type === "shot" && lax) return e.made === true ? "Goal" : e.made === false ? "Shot, no goal" : "Shot ?";
   if (e.type === "shot") return `${e.points === 1 ? "FT" : `${e.points ?? "?"}PT`} ${e.made === true ? "made" : e.made === false ? "miss" : "?"}`;
   if (e.type === "rebound") return e.reboundType === "offensive" ? "Off reb" : e.reboundType === "defensive" ? "Def reb" : "Reb";

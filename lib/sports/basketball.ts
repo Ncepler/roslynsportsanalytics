@@ -13,6 +13,12 @@ export const basketball: SportConfig = {
   sheets: ["offense-summary", "possession-log", "roslyn-offense"],
   possessionDefinition:
     "A possession starts when a team gains control of the ball and ends on a made basket (or the last made free throw of a trip), a turnover, a defensive rebound by the other team, or the end of a period. An offensive rebound does NOT start a new possession: the missed shot and the offensive rebound stay in the same possession.",
+  shotZones: [
+    { id: "paint", label: "Paint" },
+    { id: "mid-range", label: "Mid-range" },
+    { id: "corner 3", label: "Corner 3" },
+    { id: "above-the-break 3", label: "Above-the-break 3" },
+  ],
   stats: [
     // Reliable, logged
     {
@@ -64,6 +70,7 @@ export const basketball: SportConfig = {
     },
 
     // Reliable, derived in code
+    { id: "shots-taken", label: "Shots taken (field goal attempts)", tier: "reliable", source: "derived", description: "2-point and 3-point attempts, made or missed. Free throws are not counted.", sheets: ["offense-summary"], defaultOn: true },
     { id: "points", label: "Points", tier: "reliable", source: "derived", description: "2 × 2PT made + 3 × 3PT made + FT made.", sheets: ["offense-summary", "possession-log"], defaultOn: true },
     { id: "efficiency", label: "Offensive efficiency", tier: "reliable", source: "derived", description: "Points ÷ possessions × 100.", sheets: ["offense-summary"], defaultOn: true },
     { id: "ppp", label: "Points per possession", tier: "reliable", source: "derived", description: "Points ÷ possessions.", defaultOn: true },
@@ -111,7 +118,7 @@ export const basketball: SportConfig = {
     { id: "shot-type",
       pass: 1, label: "Shot type", tier: "decent", source: "logged", description: "For each field goal attempt: drive, catch-and-shoot, pull-up, post, putback, or other.", events: ["shot"], fields: ["shotType"], defaultOn: true },
     { id: "shot-zone",
-      pass: 1, label: "Shot zone", tier: "decent", source: "logged", description: "For each field goal attempt: paint, mid-range, corner 3, or above-the-break 3.", events: ["shot"], fields: ["shotZone"], defaultOn: true },
+      pass: 1, label: "Shot zone", tier: "decent", source: "logged", description: "For each field goal attempt: paint, mid-range, corner 3, or above-the-break 3.", events: ["shot"], fields: ["shotZone"], defaultOn: true, required: true },
     { id: "shooter",
       pass: 1, label: "Shooter jersey number", tier: "decent", source: "logged", description: "Jersey number of the player for each event, or null if you cannot read it.", fields: ["player"], defaultOn: true },
 

@@ -32,6 +32,7 @@ export function crumbsFor(pathname: string): Crumb[] {
   if (parts[0] === "t" && parts[1]) {
     const slug = parts[1];
     const team: Crumb = { label: nameFromSlug(slug), href: `/t/${slug}` };
+    if (parts[2] === "game") return [home, team, { label: "Schedule", href: `/t/${slug}` }, { label: "Game stats" }];
     const tab = parts[2] ? (TEAM_TABS[parts[2]] ?? "Schedule") : "Schedule";
     return [home, team, { label: tab }];
   }

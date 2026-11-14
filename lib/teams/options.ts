@@ -45,7 +45,11 @@ export type Level = (typeof LEVELS)[number]["value"];
 export type Sport = (typeof SPORTS)[number]["value"];
 
 /** Sports that have a stat config in lib/sports. Other sports get a team and a schedule, but no Analyze yet. */
-export const SPORTS_WITH_STATS: readonly Sport[] = ["basketball", "lacrosse"];
+export const SPORTS_WITH_STATS: readonly Sport[] = ["basketball", "lacrosse", "ice-hockey"];
+
+/** Sports whose Season trends are built (hockey has game stats but no season model yet). */
+export const SPORTS_WITH_SEASON: readonly Sport[] = ["basketball", "lacrosse"];
+export const hasSeason = (sport: string): boolean => (SPORTS_WITH_SEASON as readonly string[]).includes(sport);
 
 const has = (list: readonly { value: string }[], v: unknown) => typeof v === "string" && list.some((o) => o.value === v);
 export const isGender = (v: unknown): v is Gender => has(GENDERS, v);

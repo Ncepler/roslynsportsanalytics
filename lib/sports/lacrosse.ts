@@ -15,6 +15,12 @@ export const lacrosse: SportConfig = {
   sheets: ["lax-turnovers", "lax-defense"],
   possessionDefinition:
     "A possession starts when a team gains control (face-off win, ground ball, save and clear, or the other team's turnover) and ends on a goal, a turnover (interception, ground ball picked up by the other team, out of bounds, penalty), a save the goalie controls, or the end of a period. A missed shot that goes out of bounds and is awarded back to the shooting team (backed up) stays the same possession. The ball is small and hard to see: use which goal the play is at, the jersey colors, and the scoreboard, not which side of the frame the action is on.",
+  shotZones: [
+    { id: "crease", label: "Crease" },
+    { id: "inside", label: "Inside (close to the goal)" },
+    { id: "wing", label: "Wing" },
+    { id: "outside", label: "Outside" },
+  ],
   stats: [
     {
       id: "shots",
@@ -54,6 +60,7 @@ export const lacrosse: SportConfig = {
       defaultOn: true,
     },
 
+    { id: "shot-zone", pass: 1, label: "Shot zone", tier: "experimental", source: "logged", description: "For each shot: crease, inside (close to the goal), wing, or outside.", events: ["shot"], fields: ["shotZone"], defaultOn: false },
     { id: "score-by-quarter", label: "Score by quarter", tier: "reliable", source: "derived", description: "Goals per quarter for both teams.", defaultOn: true },
     { id: "scoreboard-check", label: "Scoreboard check", tier: "reliable", source: "derived", description: "Logged goals compared with the scoreboard.", defaultOn: true },
     { id: "by-quarter", label: "Turnovers by quarter", tier: "decent", source: "derived", description: "Turnovers per quarter for both teams.", sheets: ["lax-turnovers"], defaultOn: true },

@@ -1,4 +1,5 @@
 import { basketball } from "./basketball";
+import { iceHockey } from "./ice-hockey";
 import { lacrosse } from "./lacrosse";
 import type { SportConfig } from "./types";
 
@@ -6,6 +7,7 @@ import type { SportConfig } from "./types";
 export const SPORTS: Record<string, SportConfig> = {
   basketball,
   lacrosse,
+  "ice-hockey": iceHockey,
 };
 
 export function getSport(id: string): SportConfig | undefined {

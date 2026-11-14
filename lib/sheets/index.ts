@@ -13,6 +13,7 @@ import {
   sumLines,
   type StatLine,
 } from "@/lib/derive";
+import { hockeyShotsByPeriod } from "@/lib/derive/game-stats";
 import { plusMinus } from "@/lib/derive/plus-minus";
 import type { PossessionLog, Team } from "@/lib/gemini/log-types";
 
@@ -124,6 +125,21 @@ export function laxTurnovers(log: PossessionLog, tracked: Tracked, awayName: str
   };
 }
 
+/** Hockey shots by period and result, one block per team. Shots are the only hockey stat so far. */
+export function hockeyShots(log: PossessionLog, awayName: string): Sheet {
+  const rows: Cell[][] = [];
+  for (const [team, label] of [["roslyn", "Roslyn"], ["opponent", awayName]] as const) {
+    const h = hockeyShotsByPeriod(log, team);
+    for (const r of [...h.rows, h.total]) rows.push([label, r.period === "Total" ? "Total" : `P${r.period}`, r.total, r.goals, r.saved, r.missed, r.blocked, r.unknown > 0 ? r.unknown : null]);
+  }
+  return {
+    id: "hockey-shots",
+    title: "Hockey shots",
+    header: [["Team", "Period", "Shots taken", "Goals", "Saved", "Missed", "Blocked", "Result unclear"]],
+    rows,
+  };
+}
+
 /** Lacrosse defense: Roslyn's defensive possessions by M / Z / F, Goal or No Goal. Efficiency stays blank (formula unknown). */
 export function laxDefense(log: PossessionLog, tracked: Tracked): Sheet {
   const d = defenseByContext(log, "roslyn");
@@ -154,6 +170,7 @@ export function plusMinusSheet(log: PossessionLog, starters: string[]): Sheet {
 
 export function allSheets(log: PossessionLog, statIds: string[], awayName: string, sportId = "basketball", starters: string[] = []): Sheet[] {
   const tracked: Tracked = (id) => statIds.includes(id);
+  if (sportId === "ice-hockey") return [hockeyShots(log, awayName || "Opponent")];
   if (sportId === "lacrosse") return [laxTurnovers(log, tracked, awayName || "Opponent"), laxDefense(log, tracked)];
   return [
     offenseSummary(log, "roslyn", tracked, "Roslyn"),

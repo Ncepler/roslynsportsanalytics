@@ -68,9 +68,13 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
                   </span>
                 )}
               </span>
-              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${g.status === "analyzed" ? "border-border-strong text-muted" : "border-accent text-accent"}`}>
-                {g.status === "analyzed" ? "✓ Stats tracked" : "Not analyzed yet"}
-              </span>
+              {g.status === "analyzed" ? (
+                <Link href={`/t/${slug}/game/${g.id}`} className="rounded-full border border-border-strong px-2.5 py-0.5 text-xs font-medium text-muted underline-offset-2 [@media(hover:hover)_and_(pointer:fine)]:hover:border-accent [@media(hover:hover)_and_(pointer:fine)]:hover:text-accent">
+                  ✓ Stats tracked · View
+                </Link>
+              ) : (
+                <span className="rounded-full border border-accent px-2.5 py-0.5 text-xs font-medium text-accent">Not analyzed yet</span>
+              )}
             </li>
           ))}
         </ul>
