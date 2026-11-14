@@ -6,7 +6,7 @@ For the next person who looks after this site. The first half needs no coding. T
 
 A private website for the Roslyn High School sports analytics club. A member picks a team and a game, uploads the game video, and an AI (Google Gemini) watches it and writes a log of what happened, one row per possession. A member checks and fixes the log, then saves it. The site keeps the saved logs, works out the tables and season trends from them, and shows them to the club. The video itself is never kept.
 
-Live pages: a team picker, then for each team **Schedule**, **Analyze a game** and **Season trends**. Admins also get an **Admin** page. **Data & privacy** (in the menu) explains in plain words what is stored.
+Live pages: a team picker, then for each team **Schedule**, **Analyze a game** and **Season trends**. Every team shows the current season (like "26/27"), and every page has breadcrumbs at the top. Admins also get an **Admin** page. **Data & privacy** (in the menu) explains in plain words what is stored.
 
 ## Who can do what
 
@@ -16,7 +16,7 @@ Live pages: a team picker, then for each team **Schedule**, **Analyze a game** a
 | Member | The club password | See every team, analyze games, save and fix games. |
 | Admin | A separate admin password | Everything a member can, plus the Admin page: teams, seasons, schedules, data download. |
 
-There is also a private "owner test" on the Admin page, opened with a secret code. It runs the AI on any video for testing, saves nothing, and counts toward nothing.
+There is also a private "owner test": on the **Practice demo page (`/test`), admins see "Run a real video through the AI"**, unlocked with the secret owner code (`ADMIN_BYPASS_CODE`). It runs the whole real process (upload, Gemini, review) on any video, skips the Roslyn-only check, saves nothing, counts toward no team or season, and spends real Gemini credits. It is the way to test with a video that isn't a real Roslyn game.
 
 ## Accounts and who should own them
 
@@ -44,8 +44,8 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | `CLUB_PASSWORD` | The member password | You choose it |
 | `ADMIN_PASSWORD` | The admin password (must differ from the club password) | You choose it |
 | `SESSION_SECRET` | Random text that makes sign-ins tamper-proof (32+ characters) | Any password generator, or `openssl rand -base64 32` |
-| `GEMINI_API_KEY` | Lets the site use Gemini (video analysis and the Season summary) | aistudio.google.com/apikey |
-| `GEMINI_MODEL` | Which Gemini model to use (for everything) | Google's model list |
+| `GEMINI_API_KEY` | Lets the site use Gemini (video analysis, schedule screenshots and the Season summary). Google now issues only `AQ.` keys; paste the whole key with nothing cut off. | aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Which Gemini model to use (for everything). If it is wrong, the site names the models your key can use. | Google's model list |
 | `GEMINI_TIER` | `free` or `paid`. `free` shows a banner "don't upload student footage". Switch to `paid` only once billing is set up. | You set it |
 | `ALLOW_TEST_LOGIN` | `true` shows the Test button, which signs anyone in without a password (as the role in `TEST_LOGIN_ROLE`). Use it only until the real passwords are set, then set it to `false`. | You set it |
 | `ADMIN_BYPASS_CODE` | Secret code for the owner test. Leave empty to turn that feature off. | You choose it |
@@ -59,6 +59,12 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 **Add a season.** Admin → Seasons → label like `2026-27`, start and end dates → tick "Make current" → Add season. Exactly one season is current.
 
 **Add a game to the schedule.** Admin → Schedule → choose the team and season → date, opponent, home or away, optional location → Add game. If the opponent is new, choose "Add a new opponent…". A game's date must fall inside its season.
+
+**Add a whole schedule at once.** Admin → Schedule → "Add several games at once". Either type the games into the table, or choose "From screenshots": add up to 3 pictures of the schedule and press "Read the schedule". The AI copies the rows into the table; you check every row against the picture, fix anything marked, and press "Add N games". This only ever adds games: it can't change or delete games that are already there, and games already on the schedule are skipped. Game times aren't stored, and a neutral-site game is saved as "away" with the venue in the location.
+
+**Set up a brand-new copy of the site.** Run the three files in `supabase/migrations/` in order in the Supabase SQL editor (`0001_init.sql`, `0002_save_game.sql`, then `0003_seed_club_teams_and_schedule.sql`, which adds the club's teams, the 2026-27 season and the Roslyn Boys Varsity Basketball schedule). Then add the secret settings above.
+
+**If something says "Gemini rejected…".** The message now quotes Google's own reason. A bad or incomplete key, a model name Google doesn't have, and a refused request each get their own message. Fix the setting it names in Vercel and redeploy.
 
 **Analyze a game.** Team → Analyze a game → pick the game (or add one that isn't on the schedule) → upload the video → trim → check who is playing → Analyze → review → Save game. To fix a saved game later, open it from "Already analyzed" on the same page.
 
@@ -76,9 +82,9 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 
 Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supabase. `CLAUDE.md` in the code folder is the full set of decisions and rules; read it first. Run it locally with `npm install` then `npm run dev`; check a change with `npx tsc --noEmit`, `npx eslint .` and `npm run build`.
 
-**Database changes.** All SQL is in `supabase/migrations/`, numbered. To change the database, write a new numbered file (never edit an old one), then paste it into the Supabase SQL editor (club project → SQL Editor) and run it. The first two are already part of the project: `0001_init.sql` (tables) and `0002_save_game.sql` (the save function). If you set up a new Supabase project, run them in order.
+**Database changes.** All SQL is in `supabase/migrations/`, numbered. To change the database, write a new numbered file (never edit an old one), then paste it into the Supabase SQL editor (club project → SQL Editor) and run it. The first three are already part of the project: `0001_init.sql` (tables), `0002_save_game.sql` (the save function) and `0003_seed_club_teams_and_schedule.sql` (the club's teams, season and one schedule; safe to run twice). If you set up a new Supabase project, run them in order.
 
-**Add a sport to the team list.** Edit `lib/teams/options.ts` (add one line to `SPORTS`). Every dropdown and check reads that file, and no database change is needed. The new sport gets teams and schedules; its Analyze tab says "Stats for this sport aren't set up yet" until it has stats.
+**Add a sport, or a level, to the team list.** Edit `lib/teams/options.ts` (add one line to `SPORTS`, or to `LEVELS` for something like JV2). The current levels are Varsity, JV, JV2 and JHS. Every dropdown and check reads that file, and no database change is needed. The new sport gets teams and schedules; its Analyze tab says "Stats for this sport aren't set up yet" until it has stats.
 
 **Give a sport stats.** Create `lib/sports/<sport>.ts` (copy `basketball.ts` or `lacrosse.ts`), register it in `lib/sports/index.ts`, and add the sport's value to `SPORTS_WITH_STATS` in `lib/teams/options.ts`. You will also need a prompt, derivations in `lib/derive/`, and sheet layouts in `lib/sheets/`.
 
@@ -86,11 +92,16 @@ Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supa
 
 **Roles and passwords** are checked in `proxy.ts` (who may open which page) and again inside each API route (`lib/api.ts`). Roles live in the signed sign-in cookie (`lib/auth/session.ts`).
 
+**Gemini.** All calls go through `lib/gemini/client.ts`, which uses the official `@google/genai` package pinned to API version `v1beta` (the newer default, `v1`, rejects what the site sends) and sends the key in the `x-goog-api-key` header. Never put the key in a web address or check it by prefix or length. Reading schedule pictures lives in `lib/schedule/` and `app/api/admin/schedule/`.
+
 **Where things live.** `app/(app)/t/[slug]/` team pages · `app/(app)/admin/` and `app/api/admin/` admin · `app/api/games/save` and `.../[id]/log` saving and re-opening · `lib/db/` all database code (server only) · `lib/season/` Season math · `components/analyze/` the analysis screens · `components/nav/` the menu and tabs · `/test` is a simulation that never writes anything.
 
 ## Known gaps (as of the last session)
 
-- Nothing has been tested against the real Supabase project, the real Gemini API on a real game video, or a real Vercel Blob store. Everything was tested against stand-ins, and the SQL was tested on a real Postgres engine.
+- **Database:** the site has connected to the real Supabase project (the team list loaded). Saving a game, Season trends and the schedule importer have not yet been used against it; they were tested against a stand-in, and the SQL was tested on a real Postgres engine. If a page shows a database message, it says what to fix (wrong address, wrong key, tables missing).
+- **Gemini:** the video analysis, the schedule-picture reader and the Season summary have never completed a run against the real Gemini API. Three setup problems were found and fixed along the way (file addresses, API version `v1beta`, and clearer error messages), so the next real run is the real test.
+- **Vercel Blob** (the temporary video hand-off) has not been proven with a large real video.
+- **Test button:** until the real passwords are set, anyone with the website address can sign in as the role in `TEST_LOGIN_ROLE`. Set `CLUB_PASSWORD` and `ADMIN_PASSWORD`, then set `ALLOW_TEST_LOGIN=false`, delete `TEST_LOGIN_ROLE`, and redeploy.
 - Two people can analyze the same game at the same time (there is no lock). Saving over an already analyzed game asks for confirmation.
 - Stored data never expires automatically; an admin deletes games by hand.
 - The Roslyn-only video check (the AI must see "Roslyn" on screen) has not been tried on real game footage and may wrongly reject some games.
