@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { FirstTeams } from "@/components/admin/first-teams";
 import { requireMember } from "@/lib/auth/server";
 import { listActiveTeams, tryDb } from "@/lib/db/read";
 import { SPORTS, teamName } from "@/lib/teams/options";
@@ -11,12 +12,6 @@ export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
 async function Teams() {
   const role = await requireMember();
   const result = await tryDb(listActiveTeams);
-  const adminLink = role === "admin" && (
-    <Link href="/admin" className="btn btn-primary mt-4">
-      Add a team in Admin
-    </Link>
-  );
-
   if (!result.ok) {
     return (
       <div role="alert" className="rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
@@ -26,10 +21,16 @@ async function Teams() {
   }
   if (result.data.length === 0) {
     return (
-      <div className="rounded-[0.75rem] border border-border bg-surface-sunken px-5 py-8 text-center">
-        <p className="font-medium">No teams yet</p>
-        <p className="mt-1 text-sm text-muted">An admin needs to add the club&apos;s teams first.</p>
-        {adminLink}
+      <div className="rounded-[0.75rem] border border-border bg-surface-sunken px-5 py-8">
+        <p className="text-center font-medium">No teams yet</p>
+        {role === "admin" ? (
+          <>
+            <p className="mt-1 text-center text-sm text-muted">Add the club&apos;s teams to get started.</p>
+            <FirstTeams />
+          </>
+        ) : (
+          <p className="mt-1 text-center text-sm text-muted">The club&apos;s teams haven&apos;t been set up yet. Check back soon, or ask an admin.</p>
+        )}
       </div>
     );
   }

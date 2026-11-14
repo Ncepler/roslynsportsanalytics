@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { FirstSeason } from "@/components/admin/first-season";
 import { NoStats } from "@/components/nav/no-stats";
 import { StoredSeason } from "@/components/season/stored-season";
 import { requireMember } from "@/lib/auth/server";
@@ -29,7 +30,17 @@ async function Season({ params, searchParams }: { params: PageProps<"/t/[slug]/s
   const { team, stored, seasons, season } = result.data;
   if (!team) return null;
   if (!hasStats(team.sport)) return <NoStats />;
-  if (!season || !stored) return <p className="text-muted">No seasons yet. An admin needs to add one.</p>;
+  if (!season || !stored) {
+    const role = await requireMember();
+    return role === "admin" ? (
+      <div>
+        <p className="mb-4 text-muted">Season trends need a season first.</p>
+        <FirstSeason />
+      </div>
+    ) : (
+      <p className="text-muted">No season has been set up yet. Check back soon, or ask an admin.</p>
+    );
+  }
 
   return (
     <div>

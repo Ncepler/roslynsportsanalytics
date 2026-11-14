@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { FirstSeason } from "@/components/admin/first-season";
 import { formatGameDate } from "@/components/games/status-chip";
 import { getRole, requireMember } from "@/lib/auth/server";
 import { listGames, listSeasons } from "@/lib/db/admin";
@@ -51,7 +52,14 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
         </nav>
       )}
       {!season ? (
-        <p className="text-sm text-muted">No seasons yet.{isAdmin && " Add one in Admin."}</p>
+        <div>
+          <p className="text-sm text-muted">{isAdmin ? "Games are scheduled within a season, and there isn't one yet." : "No season has been set up yet. Check back soon, or ask an admin."}</p>
+          {isAdmin && (
+            <div className="mt-4">
+              <FirstSeason />
+            </div>
+          )}
+        </div>
       ) : games.length === 0 ? (
         <p className="text-sm text-muted">No games scheduled for {season.label}.</p>
       ) : (

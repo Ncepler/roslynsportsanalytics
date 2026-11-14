@@ -23,7 +23,7 @@ export function normalizeSupabaseUrl(raw: string): string | null {
   }
   const dashboard = /(?:^|\.)supabase\.com$/.test(url.hostname) ? /\/project\/([a-z0-9]{20})(?:\/|$)/.exec(url.pathname) : null;
   if (dashboard) return `https://${dashboard[1]}.supabase.co`;
-  if (!url.hostname.includes(".")) return null;
+  if (!url.hostname.includes(".") && url.hostname !== "localhost") return null;
   return url.origin;
 }
 
