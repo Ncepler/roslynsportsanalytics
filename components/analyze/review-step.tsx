@@ -364,11 +364,11 @@ function ScoreboardBanner({ checks, flagged }: { checks: ReturnType<typeof score
     return (
       <div role="status" className="rounded-[0.75rem] border border-border bg-surface px-4 py-3">
         <p className="font-semibold">Scoreboard check passed</p>
-        <p className="mt-0.5 text-sm text-muted tabular-nums">Logged points matched the scoreboard in all {checks.length} stretches checked.</p>
+        <p className="mt-0.5 text-sm text-muted tabular-nums">Logged points matched the scoreboard for every quarter checked ({checks.length} stretches).</p>
       </div>
     );
   }
-  const bad = checks.filter((c) => !c.ok);
+  const bad = checks.filter((c) => !c.ok && flagged.includes(c.quarter));
   return (
     <div role="alert" className="rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-warning-text">
       <p className="font-semibold">Scoreboard mismatch in quarter {flagged.join(", ")}. Review before copying.</p>

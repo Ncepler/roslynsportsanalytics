@@ -267,8 +267,21 @@ export function scoreboardCheck(log: PossessionLog): ScoreCheck[] {
   return checks;
 }
 
-/** Quarters with at least one scoreboard mismatch: these need review. */
-export const flaggedQuarters = (checks: ScoreCheck[]) => [...new Set(checks.filter((c) => !c.ok).map((c) => c.quarter))];
+/**
+ * Quarters that really need review: the points logged for the whole quarter differ from the scoreboard's change over
+ * that quarter, for either team. (Noah, Nov 14: a single stretch can be off by one basket only because the scoreboard
+ * reading landed a few seconds before or after the shot. That nets out over the quarter and is not a real mismatch.)
+ */
+export function flaggedQuarters(checks: ScoreCheck[]): string[] {
+  const totals = new Map<string, { logged: [number, number]; board: [number, number] }>();
+  for (const c of checks) {
+    const t = totals.get(c.quarter) ?? { logged: [0, 0], board: [0, 0] };
+    t.logged = [t.logged[0] + c.logged.roslyn, t.logged[1] + c.logged.opponent];
+    t.board = [t.board[0] + c.scoreboard.roslyn, t.board[1] + c.scoreboard.opponent];
+    totals.set(c.quarter, t);
+  }
+  return [...totals].filter(([, t]) => t.logged[0] !== t.board[0] || t.logged[1] !== t.board[1]).map(([q]) => q);
+}
 
 // ---------- lacrosse ----------
 
