@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Resolution, RunUsage } from "@/lib/client/run";
 import type { AppearanceResult } from "@/lib/gemini/prompt";
-import type { Estimate, UploadState } from "./analyze-flow";
+import type { Estimate, RunPlan, UploadState } from "./analyze-flow";
 
 export type RunState =
   | { phase: "idle" }
@@ -47,6 +47,7 @@ export function RunStep({
   segments,
   passes = 1,
   estimate,
+  plan,
   resolution,
   onResolution,
   upload,
@@ -65,6 +66,8 @@ export function RunStep({
   /** Analysis passes per part (section 6.3); more stats checked can mean more passes. */
   passes?: number;
   estimate: Estimate;
+  /** Model, fps and the registry's whole-game estimate for this sport. */
+  plan?: RunPlan;
   resolution: Resolution;
   onResolution: (r: Resolution) => void;
   upload: UploadState | null;
@@ -247,6 +250,12 @@ export function RunStep({
               <dd className="mt-0.5 text-lg font-semibold">{estimate ? `${Math.max(1, Math.round(estimate.seconds / 60))} min` : "…"}</dd>
             </div>
           </dl>
+          {plan && (
+            <p className="mt-3 text-sm tabular-nums">
+              <span className="font-medium">{plan.modelName}</span> at {plan.fps} frame{plan.fps === 1 ? "" : "s"} per second. A full {plan.footageMinutes}-minute game is about ${plan.gameEstimateUsd.toFixed(2)}.
+              {plan.priceChangeNote && <span className="mt-1 block text-warning-text">{plan.priceChangeNote}</span>}
+            </p>
+          )}
           <p className="hint mt-2">
             {estimate?.measured ? "Based on Gemini's real token count for this video." : "Rough guess until the upload finishes and Gemini counts the video."}{" "}
             Prices are unverified. Runs in {segments} {segments === 1 ? "part" : "parts"}

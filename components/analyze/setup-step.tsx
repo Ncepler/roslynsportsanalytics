@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 import type { GameSetup } from "@/lib/gemini/prompt";
-import { defaultStatIds, getSport, requiredStatIds, SPORTS } from "@/lib/sports";
+import { defaultStatIds, getSport, requiredStatIds } from "@/lib/sports";
+import { defaultRegistryStatIds, getRegistrySport, SPORT_REGISTRY } from "@/lib/sports/registry";
 import type { Tier } from "@/lib/sports/types";
+import { RegistryChecklist } from "./registry-checklist";
 
 // Group titles for the stats checklist: how much to trust each kind of stat.
 const TIERS: { tier: Tier; title: string; blurb: string }[] = [
@@ -99,6 +101,8 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
   const awayColorRef = useRef<HTMLInputElement>(null);
   const sport = getSport(setup.sportId)!;
   const required = requiredStatIds(sport);
+  const regSport = getRegistrySport(setup.sportId);
+  const registrySelected = setup.registryStatIds ?? (regSport ? defaultRegistryStatIds(regSport) : []);
   const set = <K extends keyof GameSetup>(k: K, v: GameSetup[K]) => onChange({ ...setup, [k]: v });
   const missing = { roslynColor: !setup.roslynColor.trim(), awayName: !setup.awayName.trim(), awayColor: !setup.awayColor.trim() };
   const ok = !missing.roslynColor && !missing.awayName && !missing.awayColor;
@@ -107,6 +111,10 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
   function toggle(id: string, on: boolean) {
     if (required.includes(id)) return;
     set("statIds", on ? [...setup.statIds, id] : setup.statIds.filter((x) => x !== id));
+  }
+
+  function toggleRegistry(id: string, on: boolean) {
+    set("registryStatIds", on ? [...registrySelected, id] : registrySelected.filter((x) => x !== id));
   }
 
   /** Take the person back to the first thing they forgot, so a failed Next is never a mystery. */
@@ -139,24 +147,27 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
       <div className="mt-6 space-y-6 sm:max-w-xl">
         {!locked && (
         <div>
-          <span className="label">Sport</span>
-          <div className="flex gap-2" role="radiogroup" aria-label="Sport">
-            {Object.values(SPORTS).map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                role="radio"
-                aria-checked={setup.sportId === s.id}
-                onClick={() => s.id !== setup.sportId && onChange({ ...setup, sportId: s.id, statIds: defaultStatIds(s) })}
-                className={`${choiceClass(setup.sportId === s.id)} min-w-28`}
-              >
-                {s.label}
-                <Check on={setup.sportId === s.id} />
-              </button>
-            ))}
-          </div>
+          <label className="block">
+            <span className="label">Sport</span>
+            <select
+              className="field sm:max-w-xs"
+              value={setup.sportId}
+              onChange={(e) => {
+                const next = getSport(e.target.value);
+                if (next && next.id !== setup.sportId) onChange({ ...setup, sportId: next.id, statIds: defaultStatIds(next), registryStatIds: undefined });
+              }}
+            >
+              {SPORT_REGISTRY.map((s) => (
+                <option key={s.id} value={s.id} disabled={!getSport(s.id)}>
+                  {s.name}
+                  {getSport(s.id) ? "" : " (AI logging not set up yet)"}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         )}
+        {regSport && regSport.clubFootage !== "yes" && <p className="hint -mt-3">No Roslyn Hudl footage, upload your own recording.</p>}
 
         <div ref={colorRef}>
           <span className="label">Roslyn&apos;s jerseys</span>
@@ -195,6 +206,9 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
 
       <fieldset className="mt-10">
         <legend className="text-xl font-semibold tracking-[-0.01em]">What to track</legend>
+        {regSport && <RegistryChecklist sport={regSport} selected={registrySelected} onToggle={toggleRegistry} />}
+        <details className="mt-8">
+          <summary className="cursor-pointer text-sm font-medium text-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-text">What the AI logs (advanced)</summary>
         {required.length > 0 && (
           <p className="mt-1 text-sm text-muted">
             <span aria-hidden className="font-semibold text-danger">*</span> Needed for Season trends. Always tracked.
@@ -246,6 +260,7 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
             );
           })}
         </div>
+        </details>
       </fieldset>
 
       <div className="mt-8 flex gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, ApiError, type GeminiFile } from "@/lib/client/api";
 import { saveGameToTeam, type ReopenedGame } from "@/lib/client/save";
 import type { PickableGame } from "@/lib/db/games";
@@ -11,6 +11,8 @@ import { keptRanges, planSegments, totalSeconds } from "@/lib/client/segments";
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { GameSetup } from "@/lib/gemini/prompt";
 import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/gemini/pricing";
+import { estimate as registryEstimate, tokensPerSecond } from "@/lib/sports/estimate";
+import { getRegistrySport, modelForSport } from "@/lib/sports/registry";
 import { passesNeeded } from "@/lib/gemini/prompt";
 import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
 import { ReviewStep, type SaveOptions } from "./review-step";
@@ -29,8 +31,11 @@ export type UploadState =
 
 export type Estimate = { tokens: number; cost: number; seconds: number; measured: boolean } | null;
 
-/** Rough tokens per second of video before a real count is available (docs disagree; section 16). */
-const ROUGH_TOKENS_PER_SECOND: Record<Resolution, number> = { low: 100, high: 300 };
+/** What a run will use, read from the sport registry: shown above the Analyze button. */
+export type RunPlan = { modelName: string; fps: number; priceChangeNote: string | null; gameEstimateUsd: number; footageMinutes: number };
+
+const noSubscribe = () => () => {};
+const todayIso = () => new Date().toISOString().slice(0, 10);
 const APPEARANCE_SECONDS = 120;
 const now = () => performance.now();
 /** Length of the sample game when the /test page runs without a video. */
@@ -346,15 +351,27 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const estimateKey = `${readyFile?.uri ?? ""}|${resolution}|${segments.map((s) => `${s.watch.start}-${s.watch.end}`).join(",")}`;
   const [measured, setMeasured] = useState<{ key: string; tokens: number } | null>(null);
 
+  // Model, fps and footage length for this sport come from the registry (lib/sports).
+  const regSport = getRegistrySport(setup.sportId)!;
+  const regModel = modelForSport(regSport);
+  const fps = regSport.analysis.fps;
+  // Today's date (prices change on set dates). Read after mount: reading the clock while rendering is not allowed here.
+  const today = useSyncExternalStore(noSubscribe, todayIso, () => null);
+  const plan: RunPlan | undefined = useMemo(() => {
+    if (!today) return undefined;
+    const g = registryEstimate(regSport, regModel, fps, regSport.analysis.footageMinutes, today);
+    return { modelName: regModel.displayName, fps, priceChangeNote: g.priceChange?.note ?? null, gameEstimateUsd: g.costUsd, footageMinutes: regSport.analysis.footageMinutes };
+  }, [regSport, regModel, fps, today]);
+
   const estimate: Estimate = useMemo(() => {
-    if (watchedSeconds <= 0) return null;
+    if (watchedSeconds <= 0 || !today) return null;
     const longest = Math.max(...segments.map((s) => s.watch.end - s.watch.start));
     // Each pass re-watches the video (cost × passes); passes 2 and 3 run together after pass 1 (time × 2).
     const seconds = longest * speed * (passCount > 1 ? 2 : 1) + 30;
     const real = measured?.key === estimateKey ? measured.tokens : null;
-    const tokens = (real ?? watchedSeconds * ROUGH_TOKENS_PER_SECOND[resolution]) * passCount;
-    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds * passCount), seconds, measured: real !== null };
-  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution, passCount]);
+    const tokens = (real ?? watchedSeconds * tokensPerSecond(regModel, fps, resolution)) * passCount;
+    return { tokens, cost: estimateCostUsd(tokens, watchedSeconds * passCount, regModel, regSport.analysis.footageMinutes, today), seconds, measured: real !== null };
+  }, [watchedSeconds, segments, speed, measured, estimateKey, resolution, passCount, regModel, regSport, fps, today]);
 
   // Real count via count_tokens, debounced while the user drags.
   useEffect(() => {
@@ -362,7 +379,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const counts = await Promise.all(segments.map((s) => backend.countTokens(readyFile, s.watch, resolution)));
+        const counts = await Promise.all(segments.map((s) => backend.countTokens(readyFile, s.watch, resolution, setup.sportId)));
         if (cancelled || counts.some((c) => c === null)) return;
         setMeasured({ key: estimateKey, tokens: counts.reduce<number>((s, c) => s + (c ?? 0), 0) });
       } catch {
@@ -373,7 +390,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [segments, watchedSeconds, resolution, readyFile, estimateKey, backend]);
+  }, [segments, watchedSeconds, resolution, readyFile, estimateKey, backend, setup.sportId]);
 
   // ---------- run ----------
   async function analyze() {
@@ -562,6 +579,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
             segments={segments.length}
             passes={passCount}
             estimate={estimate}
+            plan={plan}
             resolution={resolution}
             onResolution={setResolution}
             upload={upload}

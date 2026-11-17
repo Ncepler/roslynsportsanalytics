@@ -1,6 +1,8 @@
 // Server-only Gemini access. Never import this from a client component:
 // it reads GEMINI_API_KEY.
 import { GoogleGenAI, PartMediaResolutionLevel } from "@google/genai";
+import { DEFAULT_MODEL_ID, getModel } from "@/lib/sports/models";
+import { getRegistrySport, modelForSport } from "@/lib/sports/registry";
 import type { PossessionLog } from "./log-types";
 
 export const GEMINI_HOST = "https://generativelanguage.googleapis.com";
@@ -24,8 +26,13 @@ export function gemini(): GoogleGenAI {
   return client;
 }
 
-export function geminiModel(): string {
-  return process.env.GEMINI_MODEL || "gemini-3.8-flash";
+/** The model string to send. GEMINI_MODEL (env) overrides everything; otherwise the sport's registry model, else the default. */
+export function geminiModel(sportId?: string): string {
+  if (process.env.GEMINI_MODEL) return process.env.GEMINI_MODEL;
+  const sport = sportId ? getRegistrySport(sportId) : undefined;
+  const model = sport ? modelForSport(sport) : getModel(DEFAULT_MODEL_ID);
+  if (!model) throw new GeminiConfigError("No Gemini model is configured in lib/sports/models.ts.");
+  return model.apiModelId;
 }
 
 /** What Google itself said in an error reply (its JSON body: error.code, error.status, error.message, details[].reason). */
@@ -134,9 +141,9 @@ export async function deleteFile(name: string) {
 }
 
 /** Real token count for a time range of an uploaded video at a resolution. */
-export async function countVideoTokens(opts: { uri: string; mimeType: string; start: number; end: number; resolution: Resolution; fps?: number }) {
+export async function countVideoTokens(opts: { uri: string; mimeType: string; start: number; end: number; resolution: Resolution; fps?: number; model?: string }) {
   const res = await gemini().models.countTokens({
-    model: geminiModel(),
+    model: opts.model ?? geminiModel(),
     contents: [
       {
         role: "user",
@@ -190,11 +197,12 @@ export async function startVideoInteraction(opts: {
   end: number;
   resolution: Resolution;
   fps?: number;
+  model?: string;
   prompt: string;
   schema: Record<string, unknown>;
 }) {
   const interaction = await gemini().interactions.create({
-    model: geminiModel(),
+    model: opts.model ?? geminiModel(),
     background: true,
     store: true,
     input: [

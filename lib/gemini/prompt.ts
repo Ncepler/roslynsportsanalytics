@@ -8,6 +8,8 @@ export type GameSetup = {
   roslynRoster: string;
   awayRoster: string;
   statIds: string[];
+  /** Stats picked from the sport registry checklist (lib/sports/registry.ts). Not used by the possession-log pipeline. */
+  registryStatIds?: string[];
   /** Corrected appearance notes, plain text. Lives only for this run. */
   appearanceNotes?: string;
   /** Starters' jersey numbers, checked by the user (plus/minus needs who started). */

@@ -1,17 +1,16 @@
-// Cost and time estimates. UNVERIFIED: prices came from a summary Noah
-// pasted (CLAUDE.md section 16), not from Google's pricing page. Check
-// ai.google.dev/gemini-api/docs/pricing and update these before relying on them.
+// Cost and time estimates. Rates come from the model registry (lib/sports/models.ts), never from this file.
+import { OUTPUT_TOKENS_PER_GAME } from "@/lib/sports/estimate";
+import { rates } from "@/lib/sports/models";
+import type { ModelConfig } from "@/lib/sports/registry-types";
 
-/** USD per million input tokens (Gemini Flash, through Dec 31, 2026). */
-export const INPUT_USD_PER_MILLION = 0.75;
-/** USD per million output tokens. */
-export const OUTPUT_USD_PER_MILLION = 3.75;
-/** Rough output size: about 25 tokens per second of game (a possession log is verbose JSON). */
-export const OUTPUT_TOKENS_PER_SECOND = 25;
-
-export function estimateCostUsd(inputTokens: number, videoSeconds: number): number {
-  const outputTokens = videoSeconds * OUTPUT_TOKENS_PER_SECOND;
-  return (inputTokens / 1e6) * INPUT_USD_PER_MILLION + (outputTokens / 1e6) * OUTPUT_USD_PER_MILLION;
+/**
+ * Cost of a run given its input tokens. Output tokens scale the registry's per-game assumption by how much
+ * video is watched compared with a typical game of this sport (`footageMinutes`).
+ */
+export function estimateCostUsd(inputTokens: number, videoSeconds: number, model: ModelConfig, footageMinutes: number, date: Date | string): number {
+  const r = rates(model, date);
+  const outputTokens = OUTPUT_TOKENS_PER_GAME * (videoSeconds / (footageMinutes * 60));
+  return (inputTokens / 1e6) * r.inputPerMillion + (outputTokens / 1e6) * r.outputPerMillion;
 }
 
 const CALIBRATION_KEY = "analysis-seconds-per-video-second";

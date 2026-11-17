@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
 import { verifyToken } from "@/lib/auth/session";
-import { startVideoInteraction } from "@/lib/gemini/client";
+import { geminiModel, startVideoInteraction } from "@/lib/gemini/client";
 import { withinClearance, type Clearance } from "@/lib/gemini/gate";
 import { appearancePrompt, appearanceSchema, eventsPassPrompt, eventsPassSchema, possessionLogPrompt, possessionLogSchema } from "@/lib/gemini/prompt";
 import { parsePossessionRefs, parseSetup, parseVideoRange } from "@/lib/gemini/validate";
 import { getSport } from "@/lib/sports";
+import { getRegistrySport } from "@/lib/sports/registry";
 
 export const maxDuration = 60;
 
@@ -46,7 +47,9 @@ export async function POST(request: Request) {
       prompt = possessionLogPrompt(sport, setup, range);
       schema = possessionLogSchema(sport, setup.statIds);
     }
-    const id = await startVideoInteraction({ ...range, prompt, schema });
+    // fps and model come from the sport registry, never from the client.
+    const regSport = getRegistrySport(sport.id);
+    const id = await startVideoInteraction({ ...range, fps: regSport?.analysis.fps ?? range.fps, model: geminiModel(sport.id), prompt, schema });
     return NextResponse.json({ id });
   });
 }

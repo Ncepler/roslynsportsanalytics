@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "build:sports": "node --experimental-strip-types --no-warnings scripts/build-sports.ts",
     "check": "tsc --noEmit && eslint && vitest run"
   },
   "dependencies": {

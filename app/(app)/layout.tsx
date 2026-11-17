@@ -26,7 +26,8 @@ function TitleOnly() {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const freeTier = process.env.GEMINI_TIER === "free";
+  // Anything other than GEMINI_TIER=paid is treated as the free tier.
+  const freeTier = process.env.GEMINI_TIER !== "paid";
 
   return (
     <>
