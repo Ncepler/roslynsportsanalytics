@@ -11,7 +11,6 @@ export const LEVELS = [
   { value: "varsity", label: "Varsity" },
   { value: "jv", label: "JV" },
   { value: "jv2", label: "JV2" },
-  { value: "jhs", label: "JHS" },
 ] as const;
 
 // Edit this list freely. Values are lowercase, letters and hyphens only.
@@ -66,7 +65,7 @@ export function teamName(t: TeamKey): string {
   return `${labelOf(GENDERS, t.gender)} ${labelOf(LEVELS, t.level)} ${labelOf(SPORTS, t.sport)}`;
 }
 
-/** Highest-ranked level first: varsity, JV, JV2, JHS. */
+/** Highest-ranked level first: varsity, JV, JV2. */
 export function levelRank(level: string): number {
   const i = LEVELS.findIndex((l) => l.value === level);
   return i === -1 ? LEVELS.length : i;

@@ -400,8 +400,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "footageMinutes": 90,
       "mode": "events"
     },
-    "clubFootage": "yes",
-    "hudlNote": "Boys JHS and Girls JHS have no game video."
+    "clubFootage": "yes"
   },
   {
     "id": "lacrosse",
@@ -688,8 +687,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "footageMinutes": 90,
       "mode": "events"
     },
-    "clubFootage": "yes",
-    "hudlNote": "Girls JHS has no video."
+    "clubFootage": "yes"
   },
   {
     "id": "volleyball",
@@ -966,8 +964,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "footageMinutes": 75,
       "mode": "events"
     },
-    "clubFootage": "yes",
-    "hudlNote": "Girls JHS has no video."
+    "clubFootage": "yes"
   },
   {
     "id": "soccer",
@@ -1284,8 +1281,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "footageMinutes": 95,
       "mode": "events"
     },
-    "clubFootage": "yes",
-    "hudlNote": "Girls JHS has no video."
+    "clubFootage": "yes"
   },
   {
     "id": "football",
@@ -1622,7 +1618,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "mode": "events"
     },
     "clubFootage": "yes",
-    "hudlNote": "Boys Varsity: no video this fall (last seen Nov 1 2025). Boys JV: 2 games from 2024 only. Boys JHS: none."
+    "hudlNote": "Boys Varsity: no video this fall (last seen Nov 1 2025). Boys JV: 2 games from 2024 only."
   },
   {
     "id": "flag-football",
@@ -2422,7 +2418,7 @@ export const SPORT_REGISTRY: Sport[] = [
       "mode": "events"
     },
     "clubFootage": "no-video",
-    "hudlNote": "Hudl team exists (Womens Varsity, Girls JHS) but has no video."
+    "hudlNote": "Hudl team exists (Womens Varsity) but has no video."
   },
   {
     "id": "tennis",

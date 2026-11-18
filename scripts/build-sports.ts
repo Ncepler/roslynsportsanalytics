@@ -20,16 +20,12 @@ const SCOREBOARD_ONLY = new Set(["gymnastics", "fencing"]);
 
 // Real Hudl caveats from docs/sports/hudl-video-inventory.md (the only hand-entered facts here).
 const HUDL_NOTES: Record<string, string> = {
-  basketball: "Boys JHS and Girls JHS have no game video.",
-  volleyball: "Girls JHS has no video.",
-  soccer: "Girls JHS has no video.",
-  lacrosse: "Girls JHS has no video.",
-  badminton: "Mens Varsity has only one video (Sep 17 2026); Womens Varsity has many.",
-  football: "Boys Varsity: no video this fall (last seen Nov 1 2025). Boys JV: 2 games from 2024 only. Boys JHS: none.",
+    badminton: "Mens Varsity has only one video (Sep 17 2026); Womens Varsity has many.",
+  football: "Boys Varsity: no video this fall (last seen Nov 1 2025). Boys JV: 2 games from 2024 only.",
   gymnastics: "Womens Varsity only.",
   wrestling: "Boys Varsity only.",
   baseball: "Hudl team exists (Mens Varsity, Boys JV) but has no video.",
-  softball: "Hudl team exists (Womens Varsity, Girls JHS) but has no video.",
+  softball: "Hudl team exists (Womens Varsity) but has no video.",
   "water-polo": "Hudl team exists (Greenwich aquatics) but has no video.",
 };
 

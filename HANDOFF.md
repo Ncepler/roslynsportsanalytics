@@ -86,7 +86,7 @@ Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supa
 
 **Tests.** `npm test` runs the automated tests (`tests/`): the club's formulas against its sample sheet, the scoreboard check, cleaning up the AI's replies, the number check on AI text, sign-in cookies, the page and API gate, and what a save may contain. `npm run check` runs the type checker, the linter and the tests together. Run it before every push to `main`.
 
-**Add a sport, or a level, to the team list.** Edit `lib/teams/options.ts` (add one line to `SPORTS`, or to `LEVELS` for something like JV2). The current levels are Varsity, JV, JV2 and JHS. Every dropdown and check reads that file, and no database change is needed. The new sport gets teams and schedules; its Analyze tab says "Stats for this sport aren't set up yet" until it has stats.
+**Add a sport, or a level, to the team list.** Edit `lib/teams/options.ts` (add one line to `SPORTS`, or to `LEVELS` for something like JV2). The current levels are Varsity, JV and JV2 (junior high teams are not tracked). Every dropdown and check reads that file, and no database change is needed. The new sport gets teams and schedules; its Analyze tab says "Stats for this sport aren't set up yet" until it has stats.
 
 **Give a sport stats.** Create `lib/sports/<sport>.ts` (copy `basketball.ts` or `lacrosse.ts`), register it in `lib/sports/index.ts`, and add the sport's value to `SPORTS_WITH_STATS` in `lib/teams/options.ts`. You will also need a prompt, derivations in `lib/derive/`, and sheet layouts in `lib/sheets/`.
 
