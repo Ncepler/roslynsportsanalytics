@@ -5,6 +5,7 @@ import { formatGameDate } from "@/components/games/status-chip";
 import { requireMember } from "@/lib/auth/server";
 import { listGames, listSeasons } from "@/lib/db/admin";
 import { getTeamBySlug, tryDb } from "@/lib/db/read";
+import { SeasonSection } from "@/components/season/season-section";
 
 export const metadata: Metadata = { title: "Schedule · Roslyn Film Analyzer" };
 
@@ -83,10 +84,22 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
   );
 }
 
+async function Season({ params, searchParams }: { params: PageProps<"/t/[slug]">["params"]; searchParams: PageProps<"/t/[slug]">["searchParams"] }) {
+  await requireMember();
+  const { slug } = await params;
+  const { season } = await searchParams;
+  return <SeasonSection slug={slug} seasonParam={typeof season === "string" ? season : undefined} />;
+}
+
 export default function SchedulePage({ params, searchParams }: PageProps<"/t/[slug]">) {
   return (
-    <Suspense fallback={<p className="text-muted">Loading…</p>}>
-      <Schedule params={params} searchParams={searchParams} />
-    </Suspense>
+    <>
+      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+        <Schedule params={params} searchParams={searchParams} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <Season params={params} searchParams={searchParams} />
+      </Suspense>
+    </>
   );
 }

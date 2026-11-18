@@ -3,7 +3,7 @@ import { guarded, jsonError } from "@/lib/api";
 import { signToken, verifyToken } from "@/lib/auth/session";
 import { getVideoInteraction } from "@/lib/gemini/client";
 import { CLEARANCE_TTL_SECONDS, decideGate } from "@/lib/gemini/gate";
-import { getSport } from "@/lib/sports";
+import { gateSportOf } from "@/lib/sports/registry";
 
 export const maxDuration = 15;
 
@@ -14,7 +14,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/gemini/gate/
     const { id } = await ctx.params;
     const ticket = await verifyToken(new URL(request.url).searchParams.get("ticket"));
     if (!ticket || ticket.t !== "gate" || ticket.id !== id) return jsonError(403, "Invalid check.");
-    const sport = typeof ticket.sport === "string" ? getSport(ticket.sport) : undefined;
+    const sport = typeof ticket.sport === "string" ? gateSportOf(ticket.sport) : undefined;
     if (!sport) return jsonError(403, "Invalid check.");
 
     const r = await getVideoInteraction(id);

@@ -10,7 +10,6 @@ export function TeamTabs({ slug }: { slug: string }) {
   const tabs = [
     { href: base, label: "Schedule" },
     { href: `${base}/analyze`, label: "Analyze a game" },
-    { href: `${base}/season`, label: "Season trends" },
   ];
   return (
     <nav aria-label="Team" className="-mx-1 flex overflow-x-auto border-b border-border [scrollbar-width:none]">

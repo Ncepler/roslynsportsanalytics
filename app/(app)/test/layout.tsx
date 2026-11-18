@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TestTabs } from "@/components/analyze/test-tabs";
 
 export const metadata: Metadata = { title: "Simulation · Roslyn Film Analyzer" };
 
@@ -23,8 +22,7 @@ export default function TestLayout({ children }: { children: React.ReactNode }) 
         scoreboard check catch it. Don&apos;t copy these numbers into the club&apos;s sheets.
       </p>
       <div className="mt-8">
-        <TestTabs />
-        <div className="mt-8">{children}</div>
+        <div>{children}</div>
       </div>
     </section>
   );

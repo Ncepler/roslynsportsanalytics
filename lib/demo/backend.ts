@@ -8,6 +8,7 @@ import type { Backend } from "@/lib/client/backend";
 import { mergeLogs, type Range, type Segment } from "@/lib/client/segments";
 import { passesNeeded } from "@/lib/gemini/prompt";
 import { getSport } from "@/lib/sports";
+import { simulateChunk } from "./simulate-registry";
 import { appearanceNotes, simulatedNoteUpdates, simulatedStarters, simulateGame, sliceForSegment } from "./simulate";
 
 const DEMO_FILE: GeminiFile = { name: "files/simulated", uri: "simulated", mimeType: "video/mp4", state: "ACTIVE", error: null };
@@ -88,6 +89,21 @@ export function demoBackend(): Backend {
         raw: parts.map((p) => JSON.stringify(p.log, null, 2)),
         noteUpdates: simulatedNoteUpdates(setup),
       };
+    },
+    async registryLog(chunks, _video, setup, signal, onChunkDone) {
+      const whole = { start: chunks[0].start, end: chunks[chunks.length - 1].end };
+      let done = 0;
+      const parts = await Promise.all(
+        chunks.map(async (chunk, i) => {
+          await sleep(1200 + i * 400 + Math.random() * 600);
+          check(signal);
+          onChunkDone(++done, chunks.length);
+          return simulateChunk(chunk, whole, setup);
+        }),
+      );
+      const events = parts.flat().sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+      const watched = chunks.reduce((s, c) => s + (c.end - c.start), 0);
+      return { log: { events, warnings: [] }, usage: { inputTokens: Math.round(watched * 100), outputTokens: events.length * 60 }, raw: [JSON.stringify(events.slice(0, 40), null, 2)] };
     },
   };
 }

@@ -20,7 +20,7 @@ function bucketOf(s: Stat): string {
   return s.tier === null ? "none" : String(s.tier);
 }
 
-export function RegistryChecklist({ sport, selected, onToggle }: { sport: Sport; selected: string[]; onToggle: (id: string, on: boolean) => void }) {
+export function RegistryChecklist({ sport, selected, onToggle, onSetMany }: { sport: Sport; selected: string[]; onToggle: (id: string, on: boolean) => void; /** Turn a whole section on or off at once. */ onSetMany: (ids: string[], on: boolean) => void }) {
   const scoreboardOnly = sport.analysis.mode === "scoreboard-only";
   const buckets = ["1", "2", "3", "none", "all"]
     .map((key) => {
@@ -73,16 +73,28 @@ export function RegistryChecklist({ sport, selected, onToggle }: { sport: Sport;
             {TIER_TITLES[key]} <span className="font-normal normal-case tracking-normal text-muted">({count})</span>
           </span>
         );
+        const ids = groups.flatMap((g) => g.stats).filter((s) => isStatSelectable(sport, s)).map((s) => s.id);
+        const allOn = ids.length > 0 && ids.every((id) => selected.includes(id));
+        const noneOn = ids.every((id) => !selected.includes(id));
+        const bulk = ids.length > 0 && (
+          <span className="flex gap-2">
+            <button type="button" className="btn btn-ghost min-h-8 px-2 text-sm" disabled={allOn} onClick={() => onSetMany(ids, true)}>
+              Select all
+            </button>
+            <button type="button" className="btn btn-ghost min-h-8 px-2 text-sm" disabled={noneOn} onClick={() => onSetMany(ids, false)}>
+              Deselect all
+            </button>
+          </span>
+        );
         return (
           <section key={key} className="border-t border-border pt-4">
-            {key === "1" ? (
-              <>
-                {heading}
-                {body}
-              </>
-            ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {heading}
+              {bulk}
+            </div>
+            {key === "1" ? body : (
               <details>
-                <summary className="cursor-pointer">{heading}</summary>
+                <summary className="mt-1 cursor-pointer text-sm text-muted">Show the {count} stats</summary>
                 {body}
               </details>
             )}

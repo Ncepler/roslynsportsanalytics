@@ -24,7 +24,12 @@ export type LoggedEvent = {
   period: string | null;
   team: string | null;
   type: string;
-  fields: Record<string, unknown>;
+  /** Events from a hand-written event schema carry their values here. */
+  fields?: Record<string, unknown>;
+  /** Generic events (sports with no hand-written schema): which wanted stats this event counts toward. */
+  statIds?: string[];
+  /** Generic events: one line describing what was seen. Shown on Review only, never stored. */
+  detail?: string | null;
   /** Set by normalizeEvents. */
   needsReview?: boolean;
   reviewReason?: string;
@@ -50,7 +55,7 @@ function fieldSchema(f: EventTypeDef["fields"][number]) {
 }
 
 /** JSON schema for one chunk's response. Sports with no event schema get a generic envelope with a free-text detail. */
-export function buildResponseSchema(sport: Sport, teams: TeamColours): Record<string, unknown> {
+export function buildResponseSchema(sport: Sport, teams: TeamColours, statIds: string[] = []): Record<string, unknown> {
   const es = eventSchemaFor(sport);
   const teamEnum = [teams.roslyn, teams.opponent];
   const base = {
@@ -66,8 +71,13 @@ export function buildResponseSchema(sport: Sport, teams: TeamColours): Record<st
           type: "array",
           items: {
             type: "object",
-            properties: { ...base, type: { type: "string", description: "Short snake_case event name taken from the list of events to log." }, detail: nullable("string", { description: "One line describing what was seen." }) },
-            required: ["timestampSeconds", "period", "team", "type", "detail"],
+            properties: {
+              ...base,
+              type: { type: "string", description: "Short snake_case event name taken from the list of events to log." },
+              statIds: { type: "array", items: { type: "string", enum: statIds }, description: "The ids of the wanted stats this event counts toward (one event can count toward several)." },
+              detail: nullable("string", { description: "One line describing what was seen." }),
+            },
+            required: ["timestampSeconds", "period", "team", "type", "statIds", "detail"],
           },
         },
       },
@@ -93,7 +103,7 @@ export function buildResponseSchema(sport: Sport, teams: TeamColours): Record<st
   };
 }
 
-const statLine = (s: Stat) => `- ${s.name}: ${s.lookFor}`;
+const statLine = (s: Stat, withId: boolean) => `- ${withId ? `[${s.id}] ` : ""}${s.name}: ${s.lookFor}`;
 
 /** The prompt for one chunk. Contains only registry text, the event schema, and the colours the user picked. */
 export function buildPrompt(sport: Sport, selectedStats: Stat[], teams: TeamColours, chunk: Chunk): string {
@@ -106,7 +116,7 @@ export function buildPrompt(sport: Sport, selectedStats: Stat[], teams: TeamColo
     `What decides games in this sport: ${sport.summary}`,
     `Events to log: ${sport.eventsNote}`,
   ];
-  if (selectedStats.length > 0) lines.push("", "The stats wanted (code computes them from your events; log the events they need):", ...selectedStats.map(statLine));
+  if (selectedStats.length > 0) lines.push("", "The stats wanted (code computes them from your events; log the events they need):", ...selectedStats.map((s) => statLine(s, !es)));
   if (es) {
     lines.push("", "Event types and their fields (put the fields in `fields`; leave others out or null):");
     for (const e of es.events) {
@@ -114,7 +124,7 @@ export function buildPrompt(sport: Sport, selectedStats: Stat[], teams: TeamColo
       for (const f of e.fields) lines.push(`    ${f.name}${f.values ? ` (${f.values.join(" | ")})` : ` (${f.type})`}: ${f.description}`);
     }
   } else {
-    lines.push("", "No fixed event list exists for this sport yet: use short snake_case names for `type`, and put a one-line description in `detail`.");
+    lines.push("", "Log one event each time something happens that counts toward a wanted stat. Use a short snake_case name for `type`, put the ids (in square brackets above) of every stat the event counts toward in `statIds`, and a one-line description in `detail`. Only log what you can see; a stat you cannot see in this footage simply gets no events.");
   }
   return lines.join("\n");
 }
@@ -123,7 +133,7 @@ export function buildPrompt(sport: Sport, selectedStats: Stat[], teams: TeamColo
 export function buildRequests(sport: Sport, selectedStatIds: string[], teams: TeamColours, range: Chunk, chunkMinutes: number = CHUNK_MINUTES): RequestSpec[] {
   const wanted = new Set(selectedStatIds);
   const selected = sport.stats.filter((s) => wanted.has(s.id));
-  const schema = buildResponseSchema(sport, teams);
+  const schema = buildResponseSchema(sport, teams, selectedStatIds);
   return planChunks(range.start, range.end, chunkMinutes).map((chunk) => ({ chunk, prompt: buildPrompt(sport, selected, teams, chunk), schema }));
 }
 
@@ -131,15 +141,15 @@ export function buildRequests(sport: Sport, selectedStatIds: string[], teams: Te
  * Turns a chunk's raw events into whole-game events: adds the chunk start to each timestamp and marks events
  * near an inner chunk edge for review. Events are NOT merged or deduplicated: a person decides.
  */
-export function normalizeEvents(events: LoggedEvent[], chunk: Chunk, range: Chunk): LoggedEvent[] {
+export function normalizeEvents<T extends { timestampSeconds: number; needsReview?: boolean; reviewReason?: string }>(events: T[], chunk: Chunk, range: Chunk): T[] {
   return events.map((e) => {
     const t = chunk.start + e.timestampSeconds;
     const nearStart = chunk.start > range.start && t - chunk.start <= BOUNDARY_REVIEW_SECONDS;
     const nearEnd = chunk.end < range.end && chunk.end - t <= BOUNDARY_REVIEW_SECONDS;
-    const out: LoggedEvent = { ...e, timestampSeconds: t };
+    const out: T = { ...e, timestampSeconds: t };
     if (nearStart || nearEnd) {
       out.needsReview = true;
-      out.reviewReason = "Near a 10-minute chunk edge: may repeat or miss an event in the neighbouring chunk.";
+      out.reviewReason = `Near a ${CHUNK_MINUTES}-minute chunk edge: may repeat or miss an event in the neighbouring chunk.`;
     }
     return out;
   });

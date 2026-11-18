@@ -44,8 +44,8 @@ export type Gender = (typeof GENDERS)[number]["value"];
 export type Level = (typeof LEVELS)[number]["value"];
 export type Sport = (typeof SPORTS)[number]["value"];
 
-/** Sports that have a stat config in lib/sports. Other sports get a team and a schedule, but no Analyze yet. */
-export const SPORTS_WITH_STATS: readonly Sport[] = ["basketball", "lacrosse", "ice-hockey"];
+/** Every sport can be analyzed: basketball and lacrosse with the possession log, the rest with the registry event log (lib/sports). */
+export const SPORTS_WITH_STATS: readonly Sport[] = SPORTS.map((s) => s.value);
 
 /** Sports whose Season trends are built (hockey has game stats but no season model yet). */
 export const SPORTS_WITH_SEASON: readonly Sport[] = ["basketball", "lacrosse"];

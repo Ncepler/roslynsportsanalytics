@@ -7,6 +7,9 @@ import type { LogEvent, Possession } from "@/lib/gemini/log-types";
 import { passesNeeded, type AppearanceResult, type GameSetup, type PossessionRef } from "@/lib/gemini/prompt";
 import { sanitizeEvents, sanitizeLog } from "@/lib/gemini/sanitize";
 import { getSport } from "@/lib/sports";
+import { getRegistrySport } from "@/lib/sports/registry";
+import { sanitizeRegistryEvents, type RegistryLog } from "@/lib/sports/registry-log";
+import { normalizeEvents, type Chunk } from "@/lib/sports/request-builder";
 import { api, ApiError, sleep, type GeminiFile } from "./api";
 import { mergeLogs, MAX_PARALLEL, type Range, type Segment } from "./segments";
 
@@ -24,7 +27,7 @@ const RUN_TIMEOUT_MS = 30 * 60 * 1000;
 type VideoOpts = { file: GeminiFile; resolution: Resolution; fps?: number; clearance?: string };
 
 async function runOne(
-  kind: "log" | "appearance" | "events",
+  kind: "log" | "appearance" | "events" | "registry",
   range: Range,
   video: VideoOpts,
   setup: GameSetup,
@@ -186,4 +189,44 @@ export async function runPossessionLog(
   // Segments run in parallel, so each reports what changed in its stretch; keep them in game order.
   const noteUpdates = [...new Set(results.flatMap((r) => r.noteUpdates))];
   return { log: mergeLogs(results), usage, raw: results.map((r) => r.text), noteUpdates };
+}
+
+/**
+ * The registry event log, for sports that don't use the possession log. One request per chunk (MAX_PARALLEL at a
+ * time); each chunk's timestamps get the chunk start added back. Events near a chunk edge are flagged, never merged.
+ */
+export async function runRegistryLog(
+  chunks: Chunk[],
+  video: VideoOpts,
+  setup: GameSetup,
+  signal: AbortSignal,
+  onChunkDone: (done: number, total: number) => void,
+): Promise<{ log: RegistryLog; usage: RunUsage; raw: string[] }> {
+  const sport = getRegistrySport(setup.sportId);
+  if (!sport) throw new ApiError("Unknown sport.", 0);
+  const allowed = setup.registryStatIds ?? sport.stats.map((s) => s.id);
+  const colours = { roslyn: setup.roslynColor, opponent: setup.awayColor };
+  const whole = { start: chunks[0].start, end: chunks[chunks.length - 1].end };
+  const parts: { events: RegistryLog["events"]; warnings: string[]; text: string }[] = new Array(chunks.length);
+  const usage: RunUsage = { inputTokens: 0, outputTokens: 0 };
+  let next = 0;
+  let done = 0;
+
+  async function worker() {
+    while (next < chunks.length) {
+      const i = next++;
+      const chunk = chunks[i];
+      const r = await runOne("registry", chunk, video, setup, signal);
+      usage.inputTokens += r.inputTokens ?? 0;
+      usage.outputTokens += r.outputTokens ?? 0;
+      const parsed = parseJson<{ events?: unknown }>(r.text);
+      const clean = sanitizeRegistryEvents(parsed.events, sport!, allowed, colours, chunk.end - chunk.start);
+      const warnings = clean.dropped ? [`${clean.dropped} event${clean.dropped === 1 ? "" : "s"} from the AI couldn't be read and ${clean.dropped === 1 ? "was" : "were"} left out.`] : [];
+      parts[i] = { events: normalizeEvents(clean.events, chunk, whole), warnings, text: r.text };
+      onChunkDone(++done, chunks.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL, chunks.length) }, worker));
+  const events = parts.flatMap((p) => p.events).sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+  return { log: { events, warnings: parts.flatMap((p) => p.warnings) }, usage, raw: parts.map((p) => p.text) };
 }

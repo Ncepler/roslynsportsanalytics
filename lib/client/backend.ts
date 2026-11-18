@@ -4,8 +4,10 @@
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import type { AppearanceResult, GameSetup } from "@/lib/gemini/prompt";
 import { api, deleteFromGemini, uploadToGemini, waitForActive, type GeminiFile } from "./api";
-import { runAppearanceNotes, runGate, runPossessionLog, type GateOutcome, type Resolution, type RunUsage } from "./run";
+import { runAppearanceNotes, runGate, runPossessionLog, runRegistryLog, type GateOutcome, type Resolution, type RunUsage } from "./run";
 import type { Range, Segment } from "./segments";
+import type { RegistryLog } from "@/lib/sports/registry-log";
+import type { Chunk } from "@/lib/sports/request-builder";
 
 export type VideoOpts = { file: GeminiFile; resolution: Resolution; fps?: number; clearance?: string };
 
@@ -27,6 +29,14 @@ export type Backend = {
     signal: AbortSignal,
     onSegmentDone: (done: number, total: number) => void,
   ): Promise<{ log: PossessionLog; usage: RunUsage; raw: string[]; noteUpdates: string[] }>;
+  /** Event log for sports that don't use the possession log (everything but basketball and lacrosse). */
+  registryLog(
+    chunks: Chunk[],
+    video: VideoOpts,
+    setup: GameSetup,
+    signal: AbortSignal,
+    onChunkDone: (done: number, total: number) => void,
+  ): Promise<{ log: RegistryLog; usage: RunUsage; raw: string[] }>;
 };
 
 export const realBackend: Backend = {
@@ -43,4 +53,5 @@ export const realBackend: Backend = {
   gate: runGate,
   appearance: runAppearanceNotes,
   possessionLog: runPossessionLog,
+  registryLog: runRegistryLog,
 };

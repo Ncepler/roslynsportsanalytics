@@ -5,7 +5,7 @@ import { signToken, verifyOwnerToken } from "@/lib/auth/session";
 import { startClipsInteraction } from "@/lib/gemini/client";
 import { CLEARANCE_TTL_SECONDS, gateClips, gatePrompt, gateSchema } from "@/lib/gemini/gate";
 import { parseVideoRange } from "@/lib/gemini/validate";
-import { getSport } from "@/lib/sports";
+import { gateSportOf } from "@/lib/sports/registry";
 
 export const maxDuration = 30;
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const body = await readJson<Record<string, unknown>>(request);
     const range = parseVideoRange(body ? { ...body, resolution: "high", fps: undefined } : null);
     if (typeof range === "string") return jsonError(400, range);
-    const sport = typeof body?.sportId === "string" ? getSport(body.sportId) : undefined;
+    const sport = typeof body?.sportId === "string" ? gateSportOf(body.sportId) : undefined;
     if (!sport) return jsonError(400, "Unknown sport.");
 
     // Owner unlock (app/api/admin/unlock): skips the AI look. The pass is marked

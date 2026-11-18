@@ -8,7 +8,10 @@
 // The prompt contains no text the user typed (team names, colors), so it
 // can't be talked into passing a video.
 
-import type { SportConfig } from "@/lib/sports/types";
+import { SPORT_REGISTRY } from "@/lib/sports/generated/sports";
+
+/** What the check needs about a sport (a SportConfig or a registry sport fits). */
+export type GateSport = { id: string; label: string };
 
 export const GATE_CLIP_SECONDS = 20;
 /** The pass lasts long enough for a full run and a re-run. */
@@ -31,7 +34,7 @@ export function gateClips(range: GateRange): GateRange[] {
 export const gateSchema = {
   type: "object",
   properties: {
-    sportSeen: { type: "string", enum: ["basketball", "lacrosse", "ice-hockey", "other sport", "not a sports game", "unclear"], description: "What is being played in these clips." },
+    sportSeen: { type: "string", enum: [...SPORT_REGISTRY.map((s) => s.id), "other sport", "not a sports game", "unclear"], description: "What is being played in these clips." },
     isOrganizedGame: { type: "boolean", description: "True only for an organized game between two teams (not practice drills, highlights compilations, video games, or unrelated video)." },
     roslynSeen: { type: "boolean", description: 'True only if you can actually read "Roslyn" (or "ROS" as a team label next to a score) somewhere in the clips.' },
     roslynEvidence: { type: "string", description: 'Exactly where you read it, e.g. "ROSLYN across the home jerseys" or "scoreboard shows ROS 12". Empty if not seen.' },
@@ -40,7 +43,7 @@ export const gateSchema = {
   required: ["sportSeen", "isOrganizedGame", "roslynSeen", "roslynEvidence", "reason"],
 };
 
-export function gatePrompt(sport: SportConfig, clips: GateRange[]) {
+export function gatePrompt(sport: GateSport, clips: GateRange[]) {
   return [
     `These ${clips.length === 1 ? "is one clip" : `are ${clips.length} short clips`} from a video someone wants to analyze as a high school ${sport.label.toLowerCase()} game involving Roslyn High School (Roslyn Heights, NY).`,
     "Answer only from what you can see and read. Never guess.",
@@ -57,13 +60,14 @@ export type GateResult = { sportSeen: string; isOrganizedGame: boolean; roslynSe
 export type GateDecision = { pass: true; evidence: string } | { pass: false; reason: string };
 
 /** The pass/fail rule lives in code, not in the AI's answer. */
-export function decideGate(sport: SportConfig, raw: unknown): GateDecision {
+export function decideGate(sport: GateSport, raw: unknown): GateDecision {
   const r = (raw ?? {}) as Partial<GateResult>;
   const seen = typeof r.sportSeen === "string" ? r.sportSeen : "unclear";
   const why = typeof r.reason === "string" && r.reason.trim() ? ` ${r.reason.trim()}` : "";
   if (seen === "not a sports game" || seen === "unclear") return { pass: false, reason: `This doesn't look like a sports game.${why}` };
   if (seen !== sport.id) {
-    const other = seen === "basketball" || seen === "lacrosse" || seen === "ice-hockey" ? `${seen}, not ${sport.label.toLowerCase()}. If that's right, go back and change the sport.` : `${seen}, not ${sport.label.toLowerCase()}.`;
+    const seenName = SPORT_REGISTRY.find((s) => s.id === seen)?.name.toLowerCase();
+    const other = seenName ? `${seenName}, not ${sport.label.toLowerCase()}. If that's right, go back and change the sport.` : `${seen}, not ${sport.label.toLowerCase()}.`;
     return { pass: false, reason: `This looks like ${other}${why}` };
   }
   if (r.isOrganizedGame !== true) return { pass: false, reason: `This doesn't look like a full game between two teams.${why}` };

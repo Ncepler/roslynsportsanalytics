@@ -15,7 +15,7 @@ function nameFromSlug(slug: string): string {
   return slug;
 }
 
-const TEAM_TABS: Record<string, string> = { analyze: "Analyze a game", season: "Season trends" };
+const TEAM_TABS: Record<string, string> = { analyze: "Analyze a game" };
 
 export function crumbsFor(pathname: string): Crumb[] {
   const parts = pathname.split("/").filter(Boolean);
@@ -23,9 +23,7 @@ export function crumbsFor(pathname: string): Crumb[] {
 
   // The practice simulation is the only area the demo sign-in can reach, so it has its own root.
   if (parts[0] === "test") {
-    return parts[1] === "season"
-      ? [{ label: "Practice demo", href: "/test" }, { label: "Season trends" }]
-      : [{ label: "Practice demo" }, { label: "Analyze a game" }];
+    return [{ label: "Practice demo" }];
   }
 
   const home: Crumb = { label: "Home", href: "/" };

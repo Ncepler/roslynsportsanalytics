@@ -14,7 +14,10 @@ import { estimateCostUsd, recordRunSpeed, secondsPerVideoSecond } from "@/lib/ge
 import { estimate as registryEstimate, tokensPerSecond } from "@/lib/sports/estimate";
 import { getRegistrySport, modelForSport } from "@/lib/sports/registry";
 import { passesNeeded } from "@/lib/gemini/prompt";
-import { defaultStatIds, getSport, SPORTS } from "@/lib/sports";
+import { defaultStatIds, getSport, SPORTS, usesPossessionLog } from "@/lib/sports";
+import { planChunks } from "@/lib/sports/request-builder";
+import type { RegistryLog } from "@/lib/sports/registry-log";
+import { RegistryReview } from "./registry-review";
 import { ReviewStep, type SaveOptions } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
@@ -55,7 +58,7 @@ const basketballDefaults = (): GameSetup => ({
 export type TeamContext = {
   id: string;
   slug: string;
-  sport: "basketball" | "lacrosse" | "ice-hockey";
+  sport: string;
   scheduled: PickableGame[];
   analyzed: PickableGame[];
   opponents: string[];
@@ -79,6 +82,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const [resolution, setResolution] = useState<Resolution>("low");
   const [run, setRun] = useState<RunState>({ phase: "idle" });
   const [log, setLog] = useState<PossessionLog | null>(null);
+  /** Result of a run for sports that use the registry event log (everything but basketball and lacrosse). */
+  const [registryLog, setRegistryLog] = useState<RegistryLog | null>(null);
   /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
   const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
   /** Roslyn starters the user confirmed (plus/minus). Lives only for this run. */
@@ -139,7 +144,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     setSaved(false);
     setSavedGameId(null);
     // The sport comes from the team and the opponent from the game, not from typing.
-    setSetup((cur) => ({ ...cur, sportId: team.sport, awayName: c.opponent, statIds: cur.sportId === team.sport ? cur.statIds : defaultStatIds(SPORTS[team.sport]) }));
+    setSetup((cur) => ({ ...cur, sportId: team.sport, awayName: c.opponent, statIds: cur.sportId === team.sport ? cur.statIds : SPORTS[team.sport] ? defaultStatIds(SPORTS[team.sport]) : [], registryStatIds: cur.sportId === team.sport ? cur.registryStatIds : undefined }));
   }
 
   /** Opens an already saved game straight in the Review table (no video: nothing to upload or trim). */
@@ -148,7 +153,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     setGame({ id: r.game.id, opponent: r.game.opponent, date: r.game.date, homeAway: "home", reopened: true, scores: { roslyn: r.game.our_score, opponent: r.game.opp_score } });
     setSaved(false);
     setSavedGameId(null);
-    setSetup({ ...basketballDefaults(), sportId: team.sport, awayName: r.game.opponent, statIds: r.statIds.length > 0 ? r.statIds : defaultStatIds(SPORTS[team.sport]) });
+    setSetup({ ...basketballDefaults(), sportId: team.sport, awayName: r.game.opponent, statIds: r.statIds.length > 0 ? r.statIds : SPORTS[team.sport] ? defaultStatIds(SPORTS[team.sport]) : [] });
     setStarterNumbers(r.starters);
     setNotes(null);
     setLog(r.log);
@@ -174,6 +179,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     setDuration(null);
     setUpload(null);
     setLog(null);
+    setRegistryLog(null);
     setNotes(null);
     setStarterNumbers([]);
     setRun({ phase: "idle" });
@@ -223,8 +229,9 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
 
   /** Changing the trim or setup after a run makes the results stale: drop them. */
   function invalidateResults() {
-    if (!log) return;
+    if (!log && !registryLog) return;
     setLog(null);
+    setRegistryLog(null);
     setNotes(null);
     setRun({ phase: "idle" });
     setReachable((r) => (r > 3 ? 3 : r));
@@ -302,6 +309,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     setDuration(f ? null : NO_VIDEO_SECONDS);
     setPlayable(Boolean(f));
     setLog(null);
+    setRegistryLog(null);
     setRun({ phase: "idle" });
     setTrim({ range: { start: 0, end: f ? 0 : NO_VIDEO_SECONDS }, skips: [] });
     void startUpload(picked);
@@ -317,7 +325,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
   // Leaving the page (close, reload, another site) loses an unsaved run: ask first, and give the game back if they go.
-  const unsaved = (run.phase !== "idle" && run.phase !== "error" && run.phase !== "rejected" && run.phase !== "done") || (log !== null && !saved && !game?.reopened);
+  const unsaved = (run.phase !== "idle" && run.phase !== "error" && run.phase !== "rejected" && run.phase !== "done") || ((log !== null && !saved && !game?.reopened) || registryLog !== null);
   useEffect(() => {
     if (!unsaved) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -345,7 +353,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const watchedSeconds = segments.reduce((s, seg) => s + (seg.watch.end - seg.watch.start), 0);
   const readyFile = upload?.status === "ready" ? upload.file : null;
 
-  const passCount = passesNeeded(getSport(setup.sportId)!, setup.statIds).length;
+  const pipeline = usesPossessionLog(setup.sportId);
+  const passCount = pipeline ? passesNeeded(getSport(setup.sportId)!, setup.statIds).length : 1;
   // Calibrated speed from past runs (localStorage), read once on the client.
   const [speed] = useState(() => (typeof window === "undefined" ? 0.35 : secondsPerVideoSecond()));
   const estimateKey = `${readyFile?.uri ?? ""}|${resolution}|${segments.map((s) => `${s.watch.start}-${s.watch.end}`).join(",")}`;
@@ -418,6 +427,20 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       savedClearance.current = gate.bypass ? null : gate.clearance;
       const video = { file: gfile, resolution, clearance: gate.clearance };
       const runSetup: GameSetup = { ...setup };
+
+      if (!pipeline) {
+        // Registry event log: no player-notes step; straight to logging in 10-minute chunks.
+        const chunks = ranges.flatMap((r) => planChunks(r.start, r.end));
+        setRun({ phase: "logging", done: 0, total: chunks.length, started });
+        const result = await backend.registryLog(chunks, video, runSetup, ctrl.signal, (done, total) => setRun({ phase: "logging", done, total, started }));
+        setRun({ phase: "building" });
+        if (backend.calibrates) recordRunSpeed((now() - started) / 1000, Math.max(...chunks.map((c) => c.end - c.start)));
+        setRegistryLog(result.log);
+        setRun({ phase: "done", usage: result.usage, raw: result.raw });
+        await cleanupGemini();
+        go(4);
+        return;
+      }
 
       setRun({ phase: "appearance" });
       const first = ranges[0];
@@ -498,7 +521,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       {game && (
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="font-medium">
-            {SPORTS[team?.sport ?? "basketball"]?.label ?? "Game"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
+            {getRegistrySport(team?.sport ?? "basketball")?.name ?? "Game"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
           </span>
           {!saved && (
             <button type="button" className="btn btn-ghost min-h-9 px-2 text-sm" onClick={changeGame}>
@@ -599,6 +622,21 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
             }}
             demo={demo}
           />
+        )}
+        {step === 4 && registryLog && !log && (
+          <>
+            {demo && (
+              <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+                Simulated results. These events were randomly generated from this sport&apos;s stat list to show how review works. Don&apos;t copy them anywhere.
+              </p>
+            )}
+            {testMode && (
+              <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+                Test results. Nothing here is saved or counted toward any game or season.
+              </p>
+            )}
+            <RegistryReview log={registryLog} onLog={setRegistryLog} setup={setup} onSeek={seek} demo={demo} />
+          </>
         )}
         {step === 4 && log && (
           <>

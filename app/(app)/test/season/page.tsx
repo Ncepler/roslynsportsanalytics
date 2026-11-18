@@ -1,5 +1,6 @@
-import { DemoSeason } from "@/components/season/demo-season";
+import { redirect } from "next/navigation";
 
+// The simulated season now sits under the simulated analyzer on /test.
 export default function TestSeasonPage() {
-  return <DemoSeason />;
+  redirect("/test#season");
 }

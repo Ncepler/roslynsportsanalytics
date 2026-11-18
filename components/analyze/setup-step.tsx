@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { GameSetup } from "@/lib/gemini/prompt";
-import { defaultStatIds, getSport, requiredStatIds } from "@/lib/sports";
+import { defaultStatIds, getSport, requiredStatIds, usesPossessionLog } from "@/lib/sports";
 import { defaultRegistryStatIds, getRegistrySport, SPORT_REGISTRY } from "@/lib/sports/registry";
 import type { Tier } from "@/lib/sports/types";
 import { RegistryChecklist } from "./registry-checklist";
@@ -99,8 +99,9 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
   const colorRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const awayColorRef = useRef<HTMLInputElement>(null);
-  const sport = getSport(setup.sportId)!;
-  const required = requiredStatIds(sport);
+  // The possession-log sports (basketball, lacrosse) also have the older "what the AI logs" checklist.
+  const sport = usesPossessionLog(setup.sportId) ? getSport(setup.sportId) : undefined;
+  const required = sport ? requiredStatIds(sport) : [];
   const regSport = getRegistrySport(setup.sportId);
   const registrySelected = setup.registryStatIds ?? (regSport ? defaultRegistryStatIds(regSport) : []);
   const set = <K extends keyof GameSetup>(k: K, v: GameSetup[K]) => onChange({ ...setup, [k]: v });
@@ -111,6 +112,11 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
   function toggle(id: string, on: boolean) {
     if (required.includes(id)) return;
     set("statIds", on ? [...setup.statIds, id] : setup.statIds.filter((x) => x !== id));
+  }
+
+  function setRegistryMany(ids: string[], on: boolean) {
+    const rest = registrySelected.filter((x) => !ids.includes(x));
+    set("registryStatIds", on ? [...rest, ...ids] : rest);
   }
 
   function toggleRegistry(id: string, on: boolean) {
@@ -153,14 +159,14 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
               className="field sm:max-w-xs"
               value={setup.sportId}
               onChange={(e) => {
-                const next = getSport(e.target.value);
-                if (next && next.id !== setup.sportId) onChange({ ...setup, sportId: next.id, statIds: defaultStatIds(next), registryStatIds: undefined });
+                const next = getRegistrySport(e.target.value);
+                const config = next ? getSport(next.id) : undefined;
+                if (next && next.id !== setup.sportId) onChange({ ...setup, sportId: next.id, statIds: config ? defaultStatIds(config) : [], registryStatIds: undefined });
               }}
             >
               {SPORT_REGISTRY.map((s) => (
-                <option key={s.id} value={s.id} disabled={!getSport(s.id)}>
+                <option key={s.id} value={s.id}>
                   {s.name}
-                  {getSport(s.id) ? "" : " (AI logging not set up yet)"}
                 </option>
               ))}
             </select>
@@ -206,7 +212,8 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
 
       <fieldset className="mt-10">
         <legend className="text-xl font-semibold tracking-[-0.01em]">What to track</legend>
-        {regSport && <RegistryChecklist sport={regSport} selected={registrySelected} onToggle={toggleRegistry} />}
+        {regSport && <RegistryChecklist sport={regSport} selected={registrySelected} onToggle={toggleRegistry} onSetMany={setRegistryMany} />}
+        {sport && (
         <details className="mt-8">
           <summary className="cursor-pointer text-sm font-medium text-muted [@media(hover:hover)_and_(pointer:fine)]:hover:text-text">What the AI logs (advanced)</summary>
         {required.length > 0 && (
@@ -261,6 +268,7 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
           })}
         </div>
         </details>
+        )}
       </fieldset>
 
       <div className="mt-8 flex gap-2">

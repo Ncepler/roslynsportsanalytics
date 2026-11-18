@@ -6,7 +6,9 @@ import { withinClearance, type Clearance } from "@/lib/gemini/gate";
 import { appearancePrompt, appearanceSchema, eventsPassPrompt, eventsPassSchema, possessionLogPrompt, possessionLogSchema } from "@/lib/gemini/prompt";
 import { parsePossessionRefs, parseSetup, parseVideoRange } from "@/lib/gemini/validate";
 import { getSport } from "@/lib/sports";
-import { getRegistrySport } from "@/lib/sports/registry";
+import { getRegistrySport, isStatSelectable } from "@/lib/sports/registry";
+import { buildPrompt, buildResponseSchema } from "@/lib/sports/request-builder";
+import { usesPossessionLog } from "@/lib/sports";
 
 export const maxDuration = 60;
 
@@ -21,13 +23,31 @@ export async function POST(request: Request) {
     if (typeof range === "string") return jsonError(400, range);
     const setup = parseSetup(body?.setup);
     if (typeof setup === "string") return jsonError(400, setup);
-    const sport = getSport(setup.sportId)!;
+    const regSport = getRegistrySport(setup.sportId)!; // parseSetup already checked it exists
 
     // No pass from the Roslyn-game check, no analysis (lib/gemini/gate.ts). No bypass.
     const clearance = (await verifyToken(body?.clearance)) as Clearance | null;
-    if (!clearance || !withinClearance(clearance, range.uri, sport.id, range.start, range.end)) {
+    if (!clearance || !withinClearance(clearance, range.uri, regSport.id, range.start, range.end)) {
       return jsonError(403, "This video hasn't passed the Roslyn-game check.");
     }
+
+    // Registry event log: any sport that doesn't use the possession log. The prompt and schema come from the
+    // registry (lib/sports/request-builder.ts), never from the client. Timestamps count from the chunk start.
+    if (body?.kind === "registry" || !usesPossessionLog(regSport.id)) {
+      const wanted = new Set(setup.registryStatIds ?? regSport.stats.map((s) => s.id));
+      const stats = regSport.stats.filter((s) => wanted.has(s.id) && isStatSelectable(regSport, s));
+      const teams = { roslyn: setup.roslynColor, opponent: setup.awayColor };
+      const chunk = { start: range.start, end: range.end };
+      const id = await startVideoInteraction({
+        ...range,
+        fps: regSport.analysis.fps,
+        model: geminiModel(regSport.id),
+        prompt: buildPrompt(regSport, stats, teams, chunk),
+        schema: buildResponseSchema(regSport, teams, stats.map((s) => s.id)),
+      });
+      return NextResponse.json({ id });
+    }
+    const sport = getSport(setup.sportId)!;
 
     // kind: "appearance" = starters + scoreboard check; "log" = pass 1, the
     // possession list; "events" = pass 2 or 3, adding events to pass 1's list.
@@ -48,8 +68,7 @@ export async function POST(request: Request) {
       schema = possessionLogSchema(sport, setup.statIds);
     }
     // fps and model come from the sport registry, never from the client.
-    const regSport = getRegistrySport(sport.id);
-    const id = await startVideoInteraction({ ...range, fps: regSport?.analysis.fps ?? range.fps, model: geminiModel(sport.id), prompt, schema });
+    const id = await startVideoInteraction({ ...range, fps: regSport.analysis.fps, model: geminiModel(sport.id), prompt, schema });
     return NextResponse.json({ id });
   });
 }

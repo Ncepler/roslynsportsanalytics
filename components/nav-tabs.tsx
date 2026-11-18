@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 // Tabs for the /test simulation only. Real team tabs live in components/nav/team-tabs.tsx.
 const TABS = [
   { href: "/test", label: "Analyze a game" },
-  { href: "/test/season", label: "Season trends" },
 ] as const;
 
 // Tab switching is frequent, so it is instant: no transitions (CLAUDE.md section 19).

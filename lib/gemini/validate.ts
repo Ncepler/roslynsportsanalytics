@@ -1,5 +1,6 @@
 import { isNum } from "@/lib/api";
 import { getSport } from "@/lib/sports";
+import { getRegistrySport } from "@/lib/sports/registry";
 import type { Resolution } from "./client";
 import { GEMINI_HOST } from "./client";
 import { MAX_RUN_SECONDS } from "./limits";
@@ -48,12 +49,17 @@ export function parseVideoRange(body: Raw): VideoRange | string {
 export function parseSetup(raw: unknown): GameSetup | string {
   if (!raw || typeof raw !== "object") return "Missing game setup.";
   const s = raw as Record<string, unknown>;
-  const sport = typeof s.sportId === "string" ? getSport(s.sportId) : undefined;
-  if (!sport) return "Unknown sport.";
+  const regSport = typeof s.sportId === "string" ? getRegistrySport(s.sportId) : undefined;
+  if (!regSport) return "Unknown sport.";
+  // Possession-log sports also have a config with logged stat ids; the other sports only have registry stats.
+  const config = getSport(regSport.id);
   const statIds = Array.isArray(s.statIds) ? s.statIds.filter((id): id is string => typeof id === "string") : [];
-  const known = new Set(sport.stats.map((st) => st.id));
+  const known = new Set((config?.stats ?? []).map((st) => st.id));
+  const regKnown = new Set(regSport.stats.map((st) => st.id));
+  const registryStatIds = Array.isArray(s.registryStatIds) ? s.registryStatIds.filter((id): id is string => typeof id === "string" && regKnown.has(id)).slice(0, 200) : undefined;
   const setup: GameSetup = {
-    sportId: sport.id,
+    sportId: regSport.id,
+    registryStatIds,
     roslynColor: text(s.roslynColor),
     awayName: text(s.awayName),
     awayColor: text(s.awayColor),

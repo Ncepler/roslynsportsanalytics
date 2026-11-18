@@ -16,11 +16,16 @@ export function modelForSport(sport: Sport): ModelConfig {
   return m;
 }
 
-/** Stats checked by default: tier 1 stats the AI can read reliably. In scoreboard-only sports, the universal stats. */
+/** Every stat is on by default. In scoreboard-only sports only the universal stats can be on. */
 export function defaultRegistryStatIds(sport: Sport): string[] {
-  const scoreboardOnly = sport.analysis.mode === "scoreboard-only";
-  return sport.stats.filter((s) => (scoreboardOnly ? s.universal : s.tier === 1 && s.video !== "L")).map((s) => s.id);
+  return sport.stats.filter((s) => isStatSelectable(sport, s)).map((s) => s.id);
 }
 
 /** Scoreboard-only sports let you pick only the universal stats; the rest are listed but disabled. */
 export const isStatSelectable = (sport: Sport, stat: { universal: boolean }): boolean => sport.analysis.mode !== "scoreboard-only" || stat.universal;
+
+/** Just what the Roslyn-game check needs to know about a sport. Works for all 22 sports. */
+export function gateSportOf(id: string): { id: string; label: string } | undefined {
+  const s = getRegistrySport(id);
+  return s ? { id: s.id, label: s.name } : undefined;
+}
