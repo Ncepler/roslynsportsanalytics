@@ -3,8 +3,10 @@
 import { useRef, useState, type DragEvent } from "react";
 import { normalizeVideoType } from "@/lib/client/api";
 import { isAllowedVideoType, MAX_UPLOAD_BYTES } from "@/lib/gemini/limits";
+import { SportPicker } from "./sport-picker";
 
-export function UploadStep({ onPick, onNoVideo, demo = false }: { onPick: (file: File) => void; onNoVideo?: () => void; demo?: boolean }) {
+export function UploadStep({ onPick, onNoVideo, demo = false, sport }: { onPick: (file: File) => void; onNoVideo?: () => void; demo?: boolean; /** When given, the sport is asked first and the video can only be chosen after. */ sport?: { value: string | null; onPick: (sportId: string) => void } }) {
+  const waiting = Boolean(sport) && !sport!.value;
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
@@ -26,12 +28,18 @@ export function UploadStep({ onPick, onNoVideo, demo = false }: { onPick: (file:
   function onDrop(e: DragEvent) {
     e.preventDefault();
     setOver(false);
-    take(e.dataTransfer.files[0]);
+    if (!waiting) take(e.dataTransfer.files[0]);
   }
 
   return (
     <div>
+      {sport && (
+        <div className="mb-6">
+          <SportPicker value={sport.value} onPick={sport.onPick} />
+        </div>
+      )}
       <div
+        aria-disabled={waiting || undefined}
         onDragOver={(e) => {
           e.preventDefault();
           setOver(true);
@@ -40,20 +48,20 @@ export function UploadStep({ onPick, onNoVideo, demo = false }: { onPick: (file:
         onDrop={onDrop}
         className={`flex flex-col items-center justify-center rounded-[0.875rem] border border-dashed px-6 py-14 text-center ${
           over ? "border-accent bg-surface" : "border-border-strong"
-        }`}
+        } ${waiting ? "opacity-60" : ""}`}
       >
-        <p className="text-lg font-medium">Choose a game video</p>
+        <p className="text-lg font-medium">{waiting ? "Pick the sport first" : "Choose a game video"}</p>
         <p className="mt-1 max-w-[28rem] text-muted">
           {demo
             ? "Any video works. In this simulation it only plays in your browser; nothing is uploaded."
             : "MP4, MOV, or WebM, up to 2 GB. It plays here right away while it uploads to Gemini in the background. Use only downloaded files, never a Hudl screen recording."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button type="button" className="btn btn-primary" onClick={() => input.current?.click()}>
+          <button type="button" className="btn btn-primary" disabled={waiting} onClick={() => input.current?.click()}>
             Choose video
           </button>
           {onNoVideo && (
-            <button type="button" className="btn btn-secondary" onClick={onNoVideo}>
+            <button type="button" className="btn btn-secondary" disabled={waiting} onClick={onNoVideo}>
               Try it without a video
             </button>
           )}

@@ -84,6 +84,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const [log, setLog] = useState<PossessionLog | null>(null);
   /** Result of a run for sports that use the registry event log (everything but basketball and lacrosse). */
   const [registryLog, setRegistryLog] = useState<RegistryLog | null>(null);
+  /** The simulation and the owner test ask for the sport on the first step, before any video. */
+  const [sportChosen, setSportChosen] = useState(false);
   /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
   const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
   /** Roslyn starters the user confirmed (plus/minus). Lives only for this run. */
@@ -180,6 +182,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     setUpload(null);
     setLog(null);
     setRegistryLog(null);
+    setSportChosen(false);
     setNotes(null);
     setStarterNumbers([]);
     setRun({ phase: "idle" });
@@ -249,6 +252,12 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     }
     invalidateResults();
     setTrim(next);
+  }
+
+  function pickSport(sportId: string) {
+    const config = getSport(sportId);
+    setSportChosen(true);
+    changeSetup({ ...setup, sportId, statIds: config ? defaultStatIds(config) : [], registryStatIds: undefined });
   }
 
   function changeSetup(next: GameSetup) {
@@ -570,7 +579,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       <div className={step === 1 ? "mt-4" : "mt-8"}>
         {step === 0 &&
           (demo || testMode || game ? (
-            <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} />
+            <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} sport={game ? undefined : { value: sportChosen ? setup.sportId : null, onPick: pickSport }} />
           ) : team ? (
             <TeamGameStep scheduled={team.scheduled} analyzed={team.analyzed} opponents={team.opponents} onChoose={chooseGame} onReopen={reopenGame} claimError={claimError} />
           ) : null)}

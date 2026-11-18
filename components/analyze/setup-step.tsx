@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import type { GameSetup } from "@/lib/gemini/prompt";
-import { defaultStatIds, getSport, requiredStatIds, usesPossessionLog } from "@/lib/sports";
-import { defaultRegistryStatIds, getRegistrySport, SPORT_REGISTRY } from "@/lib/sports/registry";
+import { getSport, requiredStatIds, usesPossessionLog } from "@/lib/sports";
+import { defaultRegistryStatIds, getRegistrySport } from "@/lib/sports/registry";
 import type { Tier } from "@/lib/sports/types";
 import { RegistryChecklist } from "./registry-checklist";
 
@@ -151,27 +151,11 @@ export function SetupStep({ setup, onChange, onNext, onBack, locked = false }: {
       <h2 className="text-xl font-semibold tracking-[-0.01em]">Who&apos;s playing?</h2>
 
       <div className="mt-6 space-y-6 sm:max-w-xl">
-        {!locked && (
-        <div>
-          <label className="block">
+        {!locked && regSport && (
+          <p className="text-[0.9375rem]">
             <span className="label">Sport</span>
-            <select
-              className="field sm:max-w-xs"
-              value={setup.sportId}
-              onChange={(e) => {
-                const next = getRegistrySport(e.target.value);
-                const config = next ? getSport(next.id) : undefined;
-                if (next && next.id !== setup.sportId) onChange({ ...setup, sportId: next.id, statIds: config ? defaultStatIds(config) : [], registryStatIds: undefined });
-              }}
-            >
-              {SPORT_REGISTRY.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            {regSport.name} <span className="hint">(chosen on the first step; go back to change it)</span>
+          </p>
         )}
         {regSport && regSport.clubFootage !== "yes" && <p className="hint -mt-3">No Roslyn Hudl footage, upload your own recording.</p>}
 
