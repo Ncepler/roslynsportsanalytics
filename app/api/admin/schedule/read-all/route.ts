@@ -4,7 +4,7 @@ import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { db } from "@/lib/db/client";
 import { dbFail } from "@/lib/db/errors";
 import { parse, readAllBody } from "@/lib/db/schemas";
-import { generateJson, generateJsonFromFile } from "@/lib/gemini/client";
+import { generateJson, generateJsonFromFile, googleErrorOf } from "@/lib/gemini/client";
 import { scheduleAllPrompt, SCHEDULE_ALL_SCHEMA, toAllTeamDrafts, type KnownTeam } from "@/lib/schedule/read-all";
 
 export const maxDuration = 120;
@@ -38,8 +38,11 @@ export async function POST(request: Request) {
       text = input.file
         ? await generateJsonFromFile({ prompt: scheduleAllPrompt(season.label), mimeType: input.file.mediaType, data: input.file.data, schema: SCHEDULE_ALL_SCHEMA })
         : await generateJson({ prompt: scheduleAllPrompt(season.label, input.text), schema: SCHEDULE_ALL_SCHEMA, temperature: 0 });
-    } catch {
-      return jsonError(502, "Gemini couldn't read that file. Try a PDF or a clear picture, or paste the text.");
+    } catch (err) {
+      // Say what Google itself said (never the key), so a refusal can be fixed instead of guessed at.
+      const said = googleErrorOf(err)?.message ?? (err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 300) : "");
+      console.error("schedule read-all failed:", said);
+      return jsonError(502, `Gemini couldn't read that file.${said ? ` It said: ${said}` : ""} Try a PDF or a clear picture, or paste the text.`);
     }
     let drafts;
     try {

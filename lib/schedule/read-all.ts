@@ -11,6 +11,9 @@ export const MAX_ALL_ROWS = 1500;
 
 const SPORT_IDS = SPORTS.map((s) => s.value);
 
+// Plain JSON Schema (nullable = a type list with "null", and null inside enums), the same style as the possession-log schemas.
+const nullable = (type: string, extra: Record<string, unknown> = {}) => ({ type: [type, "null"], ...extra });
+
 export const SCHEDULE_ALL_SCHEMA = {
   type: "object",
   properties: {
@@ -19,16 +22,16 @@ export const SCHEDULE_ALL_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          team_label: { type: "string", nullable: true, description: "The team heading or label this game is listed under, exactly as printed (for example 'Boys Varsity Basketball'), or null." },
-          gender: { type: "string", nullable: true, enum: ["boys", "girls"], description: "boys for Boys/Mens/Men's, girls for Girls/Womens/Women's; null if not stated." },
-          level: { type: "string", nullable: true, enum: ["varsity", "jv", "jv2", "other"], description: "varsity, jv (junior varsity), jv2 (second JV); 'other' for junior high, modified, freshman, 7th or 8th grade teams; null if not stated." },
-          sport: { type: "string", nullable: true, enum: SPORT_IDS, description: "The sport, from the allowed list; null if it isn't one of them or isn't stated." },
-          month: { type: "integer", nullable: true, description: "Month number 1-12 as printed (NOV = 11), or null." },
-          day: { type: "integer", nullable: true, description: "Day of the month as printed, or null." },
-          year: { type: "integer", nullable: true, description: "Only if a 4-digit year is printed on that row, else null." },
-          opponent: { type: "string", nullable: true, description: "The other team's name only, or null if none is printed." },
-          home_away: { type: "string", nullable: true, enum: ["home", "away", "neutral"], description: "home for 'HOME VS' or 'vs', away for '@' or 'at', neutral for a neutral site; null if not stated." },
-          location: { type: "string", nullable: true, description: "A venue or event name only if printed (for example a neutral site or tournament), else null." },
+          team_label: nullable("string", { description: "The team heading or label this game is listed under, exactly as printed (for example 'Boys Varsity Basketball'), or null." }),
+          gender: nullable("string", { enum: ["boys", "girls", null], description: "boys for Boys/Mens/Men's, girls for Girls/Womens/Women's; null if not stated." }),
+          level: nullable("string", { enum: ["varsity", "jv", "jv2", "other", null], description: "varsity, jv (junior varsity), jv2 (second JV); 'other' for junior high, modified, freshman, 7th or 8th grade teams; null if not stated." }),
+          sport: nullable("string", { enum: [...SPORT_IDS, null], description: "The sport, from the allowed list; null if it isn't one of them or isn't stated." }),
+          month: nullable("integer", { description: "Month number 1-12 as printed (NOV = 11), or null." }),
+          day: nullable("integer", { description: "Day of the month as printed, or null." }),
+          year: nullable("integer", { description: "Only if a 4-digit year is printed on that row, else null." }),
+          opponent: nullable("string", { description: "The other team's name only, or null if none is printed." }),
+          home_away: nullable("string", { enum: ["home", "away", "neutral", null], description: "home for 'HOME VS' or 'vs', away for '@' or 'at', neutral for a neutral site; null if not stated." }),
+          location: nullable("string", { description: "A venue or event name only if printed (for example a neutral site or tournament), else null." }),
           scrimmage: { type: "boolean", description: "True only if the row is marked as a scrimmage." },
         },
         required: ["team_label", "gender", "level", "sport", "month", "day", "year", "opponent", "home_away", "location", "scrimmage"],
