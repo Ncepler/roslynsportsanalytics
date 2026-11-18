@@ -64,3 +64,33 @@ export async function importGames(input: { team_id: string; season_id: string; g
   }
   return { added: fresh.length, skipped: input.games.length - fresh.length };
 }
+
+export type ImportAllGame = ImportGame & { team_id: string };
+
+/**
+ * Adds games for many teams. Same safety as importGames (insert-only, repeats skipped), run one team at a time, so
+ * each team's games go in together or not at all. If a team fails, the teams before it are already added; run it again
+ * and those games are simply skipped.
+ */
+export async function importAllGames(input: { season_id: string; games: ImportAllGame[] }): Promise<{ teams: number; added: number; skipped: number }> {
+  const byTeam = new Map<string, ImportGame[]>();
+  for (const { team_id, ...game } of input.games) byTeam.set(team_id, [...(byTeam.get(team_id) ?? []), game]);
+  const tooMany = [...byTeam.values()].find((g) => g.length > MAX_ROWS);
+  if (tooMany) throw new DbError(400, `One team has more than ${MAX_ROWS} games. Check the rows. Nothing was added.`);
+  let added = 0;
+  let skipped = 0;
+  let teams = 0;
+  for (const [team_id, games] of byTeam) {
+    try {
+      const r = await importGames({ team_id, season_id: input.season_id, games });
+      added += r.added;
+      skipped += r.skipped;
+      teams += 1;
+    } catch (err) {
+      const status = err instanceof DbError ? err.status : 500;
+      const why = err instanceof DbError ? err.message : "Something went wrong.";
+      throw new DbError(status, `${why} ${teams} team${teams === 1 ? " was" : "s were"} added before this. Run it again to add the rest; games already added are skipped.`);
+    }
+  }
+  return { teams, added, skipped };
+}

@@ -189,6 +189,21 @@ export async function generateJsonFromImages(opts: { prompt: string; images: { m
   return interaction.output_text ?? "";
 }
 
+/** One request with a document (PDF, spreadsheet, Word) or a picture that must answer in JSON matching `schema` (nothing stored by Gemini). */
+export async function generateJsonFromFile(opts: { prompt: string; mimeType: string; data: string; schema: Record<string, unknown> }): Promise<string> {
+  const part = opts.mimeType.startsWith("image/")
+    ? { type: "image" as const, data: opts.data, mime_type: opts.mimeType as "image/jpeg" }
+    : { type: "document" as const, data: opts.data, mime_type: opts.mimeType };
+  const interaction = await gemini().interactions.create({
+    model: geminiModel(),
+    store: false,
+    input: [part, { type: "text" as const, text: opts.prompt }],
+    generation_config: { temperature: 0 },
+    response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
+  });
+  return interaction.output_text ?? "";
+}
+
 /** Starts a background analysis; returns the interaction id to poll. */
 export async function startVideoInteraction(opts: {
   uri: string;

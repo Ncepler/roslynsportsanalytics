@@ -5,6 +5,7 @@ import { formatGameDate } from "@/components/games/status-chip";
 import { api, ApiError } from "@/lib/client/api";
 import type { GameRow, OpponentRow, SeasonRow, TeamRow, TeamWithSchedule } from "@/lib/db/admin";
 import { ScheduleImport } from "@/components/admin/schedule-import";
+import { ScheduleImportAll } from "@/components/admin/schedule-import-all";
 import { GENDERS, hasStats, LEVELS, SPORTS, teamName } from "@/lib/teams/options";
 
 const NEW_OPPONENT = "__new";
@@ -80,6 +81,9 @@ export function ClubAdmin() {
       </Section>
       <Section title="Seasons" hint="Games belong to a season. Exactly one season is current; it's the default everywhere.">
         <SeasonsSection seasons={seasons} onChange={reload} />
+      </Section>
+      <Section title="Upload every team's schedule" hint="One file with all the schedules. Gemini reads it and sorts the games into the right teams.">
+        <ScheduleImportAll key={seasons.map((s) => s.id).join()} teams={teams} seasons={seasons} opponents={opponents.map((o) => o.name)} onDone={reload} />
       </Section>
       <Section title="Schedule" hint="Add, edit and remove games for one team and season.">
         <ScheduleSection teams={teams} seasons={seasons} opponents={opponents} onOpponentsChange={reload} />

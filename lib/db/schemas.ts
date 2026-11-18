@@ -125,3 +125,44 @@ export const readBody = z
       .max(3, "Add up to 3 pictures."),
   })
   .strict();
+
+// ---------- one file with every team's schedule ----------
+
+export const FILE_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+] as const;
+
+export const readAllBody = z
+  .object({
+    season_id: uuid,
+    // Either a file (base64) or text the browser already read from a .txt or .csv file.
+    file: z.object({ mediaType: z.enum(FILE_TYPES, { message: "Use a PDF, picture, Excel, Word, text or CSV file." }), data: z.string().min(20).max(4_000_000) }).strict().optional(),
+    text: z.string().trim().min(5).max(120_000, "That file has too much text. Split it into two files.").optional(),
+  })
+  .strict()
+  .refine((b) => Boolean(b.file) !== Boolean(b.text), { message: "Send one file." });
+
+export const importAllBody = z
+  .object({
+    season_id: uuid,
+    games: z
+      .array(
+        z
+          .object({
+            team_id: uuid,
+            game_date: isoDate,
+            opponent_name: z.string().trim().min(1, "Every game needs an opponent.").max(80, "Opponent names must be under 80 characters."),
+            home_away: z.enum(["home", "away"], { message: "Choose home or away for every game." }),
+            location,
+          })
+          .strict(),
+      )
+      .min(1, "Nothing to add.")
+      .max(1500, "That's too many games for one go."),
+  })
+  .strict();
