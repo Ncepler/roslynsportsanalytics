@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { InCharge } from "@/components/analysis/in-charge";
 import { GameStatsView } from "@/components/game/game-stats-view";
 import { formatGameDate } from "@/components/games/status-chip";
 import { requireMember } from "@/lib/auth/server";
@@ -43,6 +44,9 @@ async function Game({ params }: { params: Promise<{ slug: string; id: string }> 
       <h2 className="mt-1 text-[1.5rem] font-bold tracking-[-0.01em]">
         Roslyn vs. {opponent} <span className="text-base font-normal text-muted tabular-nums">{formatGameDate(game.game_date)}</span>
       </h2>
+      <p className="mt-1">
+        <InCharge name={(game as { assigned_to?: string | null }).assigned_to} analyzed />
+      </p>
       <div className="mt-6">
         <GameStatsView log={log} sportId={team.sport} statIds={statIds} away={opponent} />
       </div>

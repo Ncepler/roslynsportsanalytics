@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { SessionViews, SessionsProvider } from "@/components/analysis/sessions-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { AppNav } from "@/components/nav/app-nav";
 import { Breadcrumbs } from "@/components/nav/breadcrumbs";
@@ -30,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const freeTier = process.env.GEMINI_TIER !== "paid";
 
   return (
-    <>
+    <SessionsProvider>
       <header className="sticky top-0 z-10 border-b border-border bg-[var(--header-bg)] backdrop-blur-[var(--header-blur)] backdrop-saturate-150">
         <div className="mx-auto flex min-h-14 max-w-5xl items-center gap-2 px-2 sm:gap-3 sm:px-6">
           <Suspense fallback={<TitleOnly />}>
@@ -54,7 +55,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Breadcrumbs />
         </Suspense>
         {children}
+        <Suspense fallback={null}>
+          <SessionViews />
+        </Suspense>
       </main>
-    </>
+    </SessionsProvider>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { api, ApiError, type GeminiFile } from "@/lib/client/api";
+import { ApiError, type GeminiFile } from "@/lib/client/api";
 import { saveGameToTeam, type ReopenedGame } from "@/lib/client/save";
-import type { PickableGame } from "@/lib/db/games";
+import { deriveStatus, statusText, type SessionStatus } from "@/lib/analysis/status";
 import type { Sheet } from "@/lib/sheets";
 import { realBackend, type Backend } from "@/lib/client/backend";
 import type { Resolution } from "@/lib/client/run";
@@ -22,7 +22,6 @@ import { ReviewStep, type SaveOptions } from "./review-step";
 import { RunStep, type RunState } from "./run-step";
 import { SetupStep } from "./setup-step";
 import { StepIndicator, type StepIndex } from "./step-indicator";
-import { TeamGameStep, type TeamGameChoice } from "./team-game-step";
 import { TrimStep, type TrimState } from "./trim-step";
 import { UploadStep } from "./upload-step";
 
@@ -54,23 +53,18 @@ const basketballDefaults = (): GameSetup => ({
   statIds: defaultStatIds(SPORTS.basketball),
 });
 
-/** The team this Analyze tab belongs to, with its games (real flow only; the simulation and the owner test have none). */
-export type TeamContext = {
-  id: string;
-  slug: string;
-  sport: string;
-  scheduled: PickableGame[];
-  analyzed: PickableGame[];
-  opponents: string[];
-};
+/** The team an analysis belongs to (real flow only; the simulation and the owner test have none). */
+export type TeamContext = { id: string; slug: string; sport: string };
 
 /** The game this person picked: a scheduled game (`id`), or one to be added on save (`id` null). */
-type ChosenGame = { id: string | null; opponent: string; date: string; homeAway: "home" | "away"; reopened: boolean; scores: { roslyn: number | null; opponent: number | null } };
+export type ChosenGame = { id: string | null; opponent: string; date: string; homeAway: "home" | "away"; reopened: boolean; scores: { roslyn: number | null; opponent: number | null } };
 
-export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSaved }: { makeBackend?: () => Backend; demo?: boolean; team?: TeamContext; /** Called after a game is saved, so the page can refresh the schedule and the "analyzed" checkmarks. */ onSaved?: () => void; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
+export type FlowReport = { status: SessionStatus; detail: string; saved: boolean };
+
+export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, initialGame, initialReopen, claimToken, onReport, onClose, onSaved }: { makeBackend?: () => Backend; demo?: boolean; team?: TeamContext; /** The game this analysis is for (chosen on the Analyze tab, already claimed). */ initialGame?: ChosenGame; /** A saved game opened for editing: starts on Review. */ initialReopen?: ReopenedGame; /** The token that holds this game's claim; proves a save comes from whoever is analyzing it. */ claimToken?: string; /** Says what this analysis is doing (the dot on its tile). */ onReport?: (r: FlowReport) => void; /** Closes this analysis (gives the game back). */ onClose?: () => void; /** Called after a game is saved, so the page can refresh the schedule and the "analyzed" checkmarks. */ onSaved?: () => void; /** Owner-only Gemini test (from /admin): no game, skips the Roslyn check, saves nothing, counts toward nothing. */ ownerToken?: string }) {
   const testMode = Boolean(ownerToken);
-  const [step, setStep] = useState<StepIndex>(0);
-  const [reachable, setReachable] = useState<StepIndex>(0);
+  const [step, setStep] = useState<StepIndex>(initialReopen ? 4 : 0);
+  const [reachable, setReachable] = useState<StepIndex>(initialReopen ? 4 : 0);
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -78,10 +72,15 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const [currentTime, setCurrentTime] = useState(0);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [trim, setTrim] = useState<TrimState>({ range: { start: 0, end: 0 }, skips: [] });
-  const [setup, setSetup] = useState<GameSetup>(basketballDefaults);
+  const [setup, setSetup] = useState<GameSetup>(() => {
+    if (!team || !initialGame) return basketballDefaults();
+    const config = SPORTS[team.sport];
+    const statIds = initialReopen && initialReopen.statIds.length > 0 ? initialReopen.statIds : config ? defaultStatIds(config) : [];
+    return { ...basketballDefaults(), sportId: team.sport, awayName: initialGame.opponent, statIds };
+  });
   const [resolution, setResolution] = useState<Resolution>("low");
   const [run, setRun] = useState<RunState>({ phase: "idle" });
-  const [log, setLog] = useState<PossessionLog | null>(null);
+  const [log, setLog] = useState<PossessionLog | null>(initialReopen?.log ?? null);
   /** Result of a run for sports that use the registry event log (everything but basketball and lacrosse). */
   const [registryLog, setRegistryLog] = useState<RegistryLog | null>(null);
   /** The simulation and the owner test ask for the sport on the first step, before any video. */
@@ -89,7 +88,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   /** Player notes the user confirmed, plus what the AI added while watching (checked again on Review). */
   const [notes, setNotes] = useState<{ start: string; updates: string[] } | null>(null);
   /** Roslyn starters the user confirmed (plus/minus). Lives only for this run. */
-  const [starterNumbers, setStarterNumbers] = useState<string[]>([]);
+  const [starterNumbers, setStarterNumbers] = useState<string[]>(initialReopen?.starters ?? []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
@@ -103,98 +102,25 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
   const savedClearance = useRef<string | null>(null);
   const [backend] = useState<Backend>(() => (makeBackend ? makeBackend() : realBackend));
 
-  // ---------- the chosen game (real flow only; /test has no schedule) ----------
-  const [game, setGame] = useState<ChosenGame | null>(null);
+  // ---------- the game (chosen on the Analyze tab, claimed there; see components/analysis/sessions-provider.tsx) ----------
+  const [game] = useState<ChosenGame | null>(initialGame ?? null);
   const [saved, setSaved] = useState(false);
+  /** A saved game was changed after it was opened or saved. */
+  const [dirty, setDirty] = useState(false);
   /** The game this run was saved to. Later saves (after fixing a row) update that same game, never add another. */
   const [savedGameId, setSavedGameId] = useState<string | null>(null);
+  /** The app saved the AI's log by itself when the run finished (nobody has reviewed it yet). */
+  const [autoSaved, setAutoSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState<string | null>(null);
 
-  // One person per game: choosing a scheduled game claims it, a heartbeat keeps the claim fresh, and finishing,
-  // switching games or closing the page gives it back. A claim nobody refreshes expires after 30 minutes.
-  // Made on first use (an event or effect), never while rendering, so it is a fresh random value per tab.
-  const claimTokenRef = useRef<string | null>(null);
-  const getClaimToken = () => (claimTokenRef.current ??= crypto.randomUUID());
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const claimedId = team && game?.id && !game.reopened && !saved ? game.id : null;
-  const claimedRef = useRef<string | null>(null);
-  useEffect(() => {
-    claimedRef.current = claimedId;
-  }, [claimedId]);
-
-  function releaseClaim(id: string | null) {
-    if (id) void api(`/api/games/${id}/release`, { body: { token: getClaimToken() }, keepalive: true }).catch(() => {});
-  }
-
-  useEffect(() => {
-    if (!claimedId) return;
-    const timer = setInterval(() => void api(`/api/games/${claimedId}/claim`, { body: { token: getClaimToken() } }).catch(() => {}), 5 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [claimedId]);
-
-  async function chooseGame(c: TeamGameChoice) {
-    if (!team) return;
-    setClaimError(null);
-    if (c.kind === "scheduled") {
-      try {
-        await api(`/api/games/${c.id}/claim`, { body: { token: getClaimToken() } });
-      } catch (err) {
-        setClaimError(err instanceof ApiError ? err.message : "Couldn't start this game. Try again.");
-        return;
-      }
-    }
-    setGame({ id: c.kind === "scheduled" ? c.id : null, opponent: c.opponent, date: c.date, homeAway: c.homeAway, reopened: false, scores: { roslyn: null, opponent: null } });
-    setSaved(false);
-    setSavedGameId(null);
-    // The sport comes from the team and the opponent from the game, not from typing.
-    setSetup((cur) => ({ ...cur, sportId: team.sport, awayName: c.opponent, statIds: cur.sportId === team.sport ? cur.statIds : SPORTS[team.sport] ? defaultStatIds(SPORTS[team.sport]) : [], registryStatIds: cur.sportId === team.sport ? cur.registryStatIds : undefined }));
-  }
-
-  /** Opens an already saved game straight in the Review table (no video: nothing to upload or trim). */
-  function reopenGame(r: ReopenedGame) {
-    if (!team) return;
-    setGame({ id: r.game.id, opponent: r.game.opponent, date: r.game.date, homeAway: "home", reopened: true, scores: { roslyn: r.game.our_score, opponent: r.game.opp_score } });
-    setSaved(false);
-    setSavedGameId(null);
-    setSetup({ ...basketballDefaults(), sportId: team.sport, awayName: r.game.opponent, statIds: r.statIds.length > 0 ? r.statIds : SPORTS[team.sport] ? defaultStatIds(SPORTS[team.sport]) : [] });
-    setStarterNumbers(r.starters);
-    setNotes(null);
-    setLog(r.log);
-    setRun({ phase: "idle" });
-    setReachable(4);
-    setStep(4);
-  }
-
-  /** Starts over at the game picker. */
-  function changeGame() {
-    releaseClaim(claimedRef.current);
-    runAbort.current?.abort();
-    uploadAbort.current?.abort();
-    if (geminiName.current) void backend.deleteFile(geminiName.current);
-    geminiName.current = null;
-    clearance.current = null;
-    savedClearance.current = null;
-    setGame(null);
-    setSaved(false);
-    setSavedGameId(null);
-    setFile(null);
-    setVideoUrl(null);
-    setDuration(null);
-    setUpload(null);
-    setLog(null);
-    setRegistryLog(null);
-    setSportChosen(false);
-    setNotes(null);
-    setStarterNumbers([]);
-    setRun({ phase: "idle" });
-    setTrim({ range: { start: 0, end: 0 }, skips: [] });
-    setSetup(basketballDefaults());
-    setReachable(0);
-    setStep(0);
-  }
-
-  async function saveGame(_sheets: Sheet[], opts: SaveOptions) {
-    if (!game || !team || !log) return;
-    if (!game.reopened && !savedClearance.current) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
+  /**
+   * Stores a log in the database. The same call serves the Save button and the automatic save at the end of a run.
+   * `starters` and `statIds` are passed in because the automatic save runs before state has caught up.
+   */
+  async function persist(logToSave: PossessionLog, args: { roslyn: number | null; opponent: number | null; starters: string[]; statIds: string[]; auto: boolean }) {
+    if (!game || !team) return;
+    if (!game.reopened && !savedClearance.current && savedGameId === null) throw new Error("This run didn't pass the Roslyn-game check, so it can't be saved. Run it again.");
     const gameId = savedGameId ?? game.id;
     // Saved once already (from this run, or an opened saved game): this save replaces it, and the person just said yes to that.
     const replacing = game.reopened || savedGameId !== null;
@@ -204,25 +130,35 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       reopen: replacing || undefined,
       confirm_replace: replacing || undefined,
       clearance: replacing ? undefined : (savedClearance.current ?? undefined),
-      our_score: opts.roslyn,
-      opp_score: opts.opponent,
-      stat_ids: setup.statIds,
-      starters: starterNumbers,
-      log: { possessions: log.possessions, scoreboard: log.scoreboard },
+      claim_token: claimToken,
+      auto: args.auto || undefined,
+      our_score: args.roslyn,
+      opp_score: args.opponent,
+      stat_ids: args.statIds,
+      starters: args.starters,
+      log: { possessions: logToSave.possessions, scoreboard: logToSave.scoreboard },
     };
     let result: { game_id: string };
     try {
       result = await saveGameToTeam(payload);
     } catch (err) {
-      // Someone saved this game while it was being reviewed: replacing needs an explicit yes.
-      if (err instanceof ApiError && err.code === "needs_confirm") {
+      // Someone saved this game while it was being reviewed: replacing needs an explicit yes (never for the automatic save).
+      if (err instanceof ApiError && err.code === "needs_confirm" && !args.auto) {
         if (!window.confirm(`${err.message} Saving again replaces what was saved.`)) throw new Error("Not saved.");
         result = await saveGameToTeam({ ...payload, confirm_replace: true });
       } else throw err;
     }
     setSavedGameId(result.game_id);
     setSaved(true);
+    setAutoSaved(args.auto);
+    setSaveFailed(null);
+    setDirty(false);
     onSaved?.();
+  }
+
+  async function saveGame(_sheets: Sheet[], opts: SaveOptions) {
+    if (!log) return;
+    await persist(log, { roslyn: opts.roslyn, opponent: opts.opponent, starters: starterNumbers, statIds: setup.statIds, auto: false });
   }
 
   const go = useCallback((s: StepIndex) => {
@@ -342,18 +278,31 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
     return () => window.removeEventListener("beforeunload", warn);
   }, [unsaved]);
   useEffect(() => {
-    const giveBack = () => releaseClaim(claimedRef.current);
-    window.addEventListener("pagehide", giveBack);
     return () => {
-      window.removeEventListener("pagehide", giveBack);
-      // The flow itself is going away (another team, or out of the team pages): stop work, clean up, give the game back.
-      giveBack();
+      // This analysis is being closed: stop work and clean up. (The claim on the game is given back by the sessions provider.)
       runAbort.current?.abort();
       uploadAbort.current?.abort();
       if (geminiName.current) void backend.deleteFile(geminiName.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---------- tell the sessions list what this analysis is doing (the dot on its tile) ----------
+  const statusInput = {
+    phase: run.phase,
+    hasResults: Boolean(log) || Boolean(registryLog),
+    // An opened saved game counts as saved until it is changed.
+    saved: (saved || Boolean(game?.reopened && !dirty)) && !saving,
+    savable: Boolean(team && game && usesPossessionLog(setup.sportId)),
+    saving,
+    saveFailed: saveFailed !== null,
+  };
+  const reportStatus = deriveStatus(statusInput);
+  const reportDetail = statusText({ ...statusInput, step });
+  useEffect(() => {
+    onReport?.({ status: reportStatus, detail: reportDetail, saved: statusInput.saved });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportStatus, reportDetail, statusInput.saved]);
 
   // ---------- estimate (updates live as the trim changes) ----------
   const ranges = useMemo(() => keptRanges(trim.range, trim.skips), [trim]);
@@ -485,6 +434,18 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       setRun({ phase: "done", usage: result.usage, raw: result.raw });
       await cleanupGemini();
       go(4);
+      // A finished game saves itself, so Season trends update without anyone pressing a button. Whoever reviews it
+      // later can fix a row and save again (that replaces this save). Test runs and the simulation never save.
+      if (team && game && !demo && !testMode && savedClearance.current) {
+        setSaving(true);
+        try {
+          await persist(result.log, { roslyn: null, opponent: null, starters: starters.roslyn.filter(Boolean), statIds: setup.statIds, auto: true });
+        } catch (err) {
+          setSaveFailed(err instanceof Error ? err.message : "It didn't save.");
+        } finally {
+          setSaving(false);
+        }
+      }
     } catch (err) {
       failRun(err, ctrl);
     }
@@ -525,16 +486,24 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
           Owner test. This runs on real Gemini with any video, but nothing is saved and it doesn&apos;t count toward any game or season.
         </p>
       )}
-      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} firstLabel={demo || testMode ? "Upload" : "Game"} />
+      <StepIndicator current={step} reachable={file ? reachable : 0} onGo={go} firstLabel="Upload" />
 
       {game && (
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="font-medium">
             {getRegistrySport(team?.sport ?? "basketball")?.name ?? "Game"} {game.homeAway === "home" ? "vs." : "at"} {game.opponent}
           </span>
-          {!saved && (
-            <button type="button" className="btn btn-ghost min-h-9 px-2 text-sm" onClick={changeGame}>
-              Choose a different game
+          {onClose && (
+            <button
+              type="button"
+              className="btn btn-ghost min-h-9 px-2 text-sm"
+              onClick={() => {
+                const running = run.phase !== "idle" && run.phase !== "error" && run.phase !== "rejected" && run.phase !== "done";
+                if ((running || (registryLog !== null) || (log !== null && !saved && !game.reopened)) && !window.confirm("Close this analysis? Anything that isn't saved is lost.")) return;
+                onClose();
+              }}
+            >
+              {saved || game.reopened ? "Close" : "Close this analysis"}
             </button>
           )}
           {game.reopened && <span className="text-muted">Editing a saved game. There is no video here, so clicking a row can&apos;t jump to the footage.</span>}
@@ -577,12 +546,9 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
       )}
 
       <div className={step === 1 ? "mt-4" : "mt-8"}>
-        {step === 0 &&
-          (demo || testMode || game ? (
-            <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} sport={game ? undefined : { value: sportChosen ? setup.sportId : null, onPick: pickSport }} />
-          ) : team ? (
-            <TeamGameStep scheduled={team.scheduled} analyzed={team.analyzed} opponents={team.opponents} onChoose={chooseGame} onReopen={reopenGame} claimError={claimError} />
-          ) : null)}
+        {step === 0 && (demo || testMode || game) && (
+          <UploadStep onPick={pickFile} onNoVideo={demo ? () => pickFile(null) : undefined} demo={demo} sport={game ? undefined : { value: sportChosen ? setup.sportId : null, onPick: pickSport }} />
+        )}
         {step === 1 && (
           <>
             <TrimStep
@@ -649,6 +615,16 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
         )}
         {step === 4 && log && (
           <>
+            {autoSaved && saved && (
+              <p role="status" className="mb-6 rounded-[0.75rem] border border-border bg-surface-sunken px-4 py-3 text-sm">
+                <span className="font-medium">Saved automatically.</span> This game&apos;s stats are in the database and Season trends already include them. Nobody has checked the AI&apos;s log yet: look it over, fix any row that&apos;s wrong, and press Save game to replace the saved version.
+              </p>
+            )}
+            {saveFailed && (
+              <p role="alert" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
+                The game didn&apos;t save by itself ({saveFailed}). The results below are still here: press Save game.
+              </p>
+            )}
             {testMode && (
               <p role="status" className="mb-6 rounded-[0.75rem] border border-warning-border bg-warning-bg px-4 py-3 text-sm font-medium text-warning-text">
                 Test results. Nothing here is saved or counted toward any game or season.
@@ -663,6 +639,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, onSav
                 setLog(next);
                 // A fix after saving brings the save button back, so the fix isn't lost.
                 setSaved(false);
+                setDirty(true);
+                setAutoSaved(false);
               }} setup={setup} starters={starterNumbers} demo={demo} onSeek={seek} playerNotes={notes} save={game && team ? { saved, onSave: saveGame, scores: game.scores, reopened: game.reopened, scheduleHref: `/t/${team.slug}` } : undefined} usage={run.phase === "done" ? run.usage : null} raw={run.phase === "done" ? run.raw : []} />
           </>
         )}

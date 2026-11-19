@@ -34,6 +34,10 @@
   --warning-text: oklch(0.4 0.08 70);
   --warning-border: oklch(0.86 0.08 85);
   --danger: oklch(0.52 0.18 27);
+  /* Status dots on analyses (Claude-style): blue = needs you, green = done, red = failed, grey = working. */
+  --dot-needs: oklch(0.6 0.19 255);
+  --dot-done: oklch(0.62 0.17 150);
+  --dot-working: oklch(0.65 0.01 250);
   /* Skipped breaks on the trim slider */
   --break: oklch(0.6 0.16 55);
 
@@ -73,6 +77,9 @@
     --warning-text: oklch(0.88 0.08 85);
     --warning-border: oklch(0.4 0.06 75);
     --danger: oklch(0.72 0.15 27);
+    --dot-needs: oklch(0.72 0.15 255);
+    --dot-done: oklch(0.74 0.16 150);
+    --dot-working: oklch(0.6 0.01 250);
     --break: oklch(0.72 0.14 60);
 
     --header-bg: oklch(0.17 0.006 var(--accent-hue) / 0.72);
@@ -119,6 +126,9 @@
   --color-warning-text: var(--warning-text);
   --color-warning-border: var(--warning-border);
   --color-danger: var(--danger);
+  --color-dot-needs: var(--dot-needs);
+  --color-dot-done: var(--dot-done);
+  --color-dot-working: var(--dot-working);
   --color-team-a: var(--team-a);
   --color-team-b: var(--team-b);
 
@@ -296,4 +306,14 @@
       background: var(--surface-sunken);
     }
   }
+}
+
+/* Working analyses breathe slowly. Opacity only; off for reduced motion. */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.status-pulse { animation: status-pulse 1.6s var(--ease-in-out) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .status-pulse { animation: none; }
 }

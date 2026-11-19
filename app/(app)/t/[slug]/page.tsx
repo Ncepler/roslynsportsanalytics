@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { InCharge } from "@/components/analysis/in-charge";
 import { formatGameDate } from "@/components/games/status-chip";
 import { requireMember } from "@/lib/auth/server";
 import { listGames, listSeasons } from "@/lib/db/admin";
+import { isClaimFresh } from "@/lib/db/games";
 import { getTeamBySlug, tryDb } from "@/lib/db/read";
 import { SeasonSection } from "@/components/season/season-section";
 
@@ -68,6 +70,9 @@ async function Schedule({ params, searchParams }: { params: PageProps<"/t/[slug]
                     {g.location}
                   </span>
                 )}
+                <span className="mt-0.5 block">
+                  <InCharge name={g.assigned_to} state={g.analysis_state} analyzed={g.status === "analyzed"} busy={g.status === "scheduled" && isClaimFresh(g.analyzing_since)} />
+                </span>
               </span>
               {g.status === "analyzed" ? (
                 <Link href={`/t/${slug}/game/${g.id}`} className="rounded-full border border-border-strong px-2.5 py-0.5 text-xs font-medium text-muted underline-offset-2 [@media(hover:hover)_and_(pointer:fine)]:hover:border-accent [@media(hover:hover)_and_(pointer:fine)]:hover:text-accent">

@@ -1,12 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { PersistentAnalyze } from "@/components/analyze/persistent-analyze";
 import { TeamTabs } from "@/components/nav/team-tabs";
-import { listTeamGames } from "@/lib/db/games";
 import { requireMember } from "@/lib/auth/server";
 import { getCurrentSeasonLabel, getTeamBySlug, tryDb } from "@/lib/db/read";
 import { shortSeason } from "@/lib/schedule/dates";
-import { hasStats, teamName } from "@/lib/teams/options";
+import { teamName } from "@/lib/teams/options";
 
 async function TeamFrame({ params, children }: { params: LayoutProps<"/t/[slug]">["params"]; children: React.ReactNode }) {
   await requireMember();
@@ -21,8 +19,6 @@ async function TeamFrame({ params, children }: { params: LayoutProps<"/t/[slug]"
   }
   if (!result.data) notFound();
   const team = result.data;
-  // The Analyze flow lives here (not in the Analyze page) so its state survives switching tabs.
-  const games = !team.archived && hasStats(team.sport) ? await tryDb(() => listTeamGames(team.id)) : null;
   return (
     <section>
       <h1 className="flex flex-wrap items-baseline gap-x-3 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">
@@ -35,7 +31,6 @@ async function TeamFrame({ params, children }: { params: LayoutProps<"/t/[slug]"
       </div>
       <div className="mt-8">
         {children}
-        {games?.ok && <PersistentAnalyze team={{ id: team.id, slug: team.slug, sport: team.sport, ...games.data }} />}
       </div>
     </section>
   );

@@ -71,8 +71,29 @@ export const gamePatch = z
 
 export const idParam = uuid;
 
-/** Body of the claim and release routes: a random per-tab token (a UUID), never a name. */
-export const claimBody = z.object({ token: z.string().uuid("Invalid token.") }).strict();
+/**
+ * A club member's own typed name, shown next to the games they are in charge of. Letters, spaces and . ' - only,
+ * so it can't carry markup or a sentence. Not the people in the footage: this is whoever is using the site.
+ */
+export const memberName = z
+  .string()
+  .trim()
+  .min(1, "Enter your name.")
+  .max(40, "Use 40 characters or fewer.")
+  .regex(/^[\p{L}][\p{L} .'’-]*$/u, "Use letters only for your name.");
+
+/** What an analysis is doing right now, shown as a dot (blue = needs the member, green = saved, red = failed). */
+export const analysisStates = ["working", "needs_input", "failed"] as const;
+export type AnalysisState = (typeof analysisStates)[number];
+
+/** Body of the claim route (also the heartbeat): a random per-tab token (a UUID), the member's name, and the state. */
+export const claimBody = z.object({ token: z.string().uuid("Invalid token."), name: memberName, state: z.enum(analysisStates).optional() }).strict();
+
+/** Body of the release route: only the token. */
+export const releaseBody = z.object({ token: z.string().uuid("Invalid token.") }).strict();
+
+/** Body of the "take this game" route: a name to put the game in that member's charge, or null to give it up. */
+export const assignBody = z.object({ name: memberName.nullable() }).strict();
 
 /** Validates untrusted input. Throws a 400 DbError with the first problem in plain words. */
 export function parse<T>(schema: z.ZodType<T>, data: unknown): T {

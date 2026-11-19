@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { AnalysisHub } from "@/components/analysis/analysis-hub";
 import { NoStats } from "@/components/nav/no-stats";
 import { requireMember } from "@/lib/auth/server";
+import { listTeamGames } from "@/lib/db/games";
 import { getTeamBySlug, tryDb } from "@/lib/db/read";
-import { hasStats } from "@/lib/teams/options";
+import { hasStats, teamName } from "@/lib/teams/options";
 
 export const metadata: Metadata = { title: "Analyze a game · Roslyn Film Analyzer" };
 
-// The Analyze flow itself is mounted by the team layout (components/analyze/persistent-analyze.tsx) so that
-// switching tabs doesn't throw away a run in progress. This page only covers the cases where there is nothing to analyze.
+// The Analyze tab: pick a game and start an analysis. Running analyses are mounted above the pages
+// (components/analysis/sessions-provider.tsx), so moving around the site never stops one.
 async function Analyze({ params }: { params: PageProps<"/t/[slug]/analyze">["params"] }) {
   await requireMember();
   const { slug } = await params;
@@ -17,7 +19,9 @@ async function Analyze({ params }: { params: PageProps<"/t/[slug]/analyze">["par
   const team = result.data;
   if (team.archived) return <p className="text-muted">This team is archived.</p>;
   if (!hasStats(team.sport)) return <NoStats />;
-  return null;
+  const games = await tryDb(() => listTeamGames(team.id));
+  if (!games.ok) return <p role="alert" className="text-sm text-warning-text">{games.message}</p>;
+  return <AnalysisHub team={{ id: team.id, slug: team.slug, sport: team.sport, name: teamName(team) }} {...games.data} />;
 }
 
 export default function AnalyzePage({ params }: PageProps<"/t/[slug]/analyze">) {

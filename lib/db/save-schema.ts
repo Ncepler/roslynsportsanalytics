@@ -71,6 +71,10 @@ export const saveBody = z
     reopen: z.boolean().optional(),
     confirm_replace: z.boolean().optional(),
     clearance: z.string().max(4000).optional(),
+    /** The per-tab token that claimed this game, proving the save comes from whoever is analyzing it. */
+    claim_token: z.string().uuid().optional(),
+    /** True when the app saved the AI's log by itself when the analysis finished, before anyone reviewed it. */
+    auto: z.boolean().optional(),
     our_score: score,
     opp_score: score,
     stat_ids: z.array(z.string().max(60)).max(60),

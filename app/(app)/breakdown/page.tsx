@@ -38,7 +38,7 @@ export default function BreakdownPage() {
             <li>Face data of any kind. There is no face recognition and no reference photos are sent.</li>
             <li>Appearance notes (&ldquo;#5, white jersey, headband&rdquo;). They exist for one run, then are discarded.</li>
             <li>The AI&apos;s descriptions or notes about what it saw, and the video&apos;s file name (either could contain a name).</li>
-            <li>Student names. The app only uses jersey numbers, and tracker names are never entered.</li>
+            <li>The names of the players in the footage. The app only uses jersey numbers.</li>
           </ul>
         </Card>
         <Card title="What is stored">
@@ -46,6 +46,7 @@ export default function BreakdownPage() {
             <li>Teams, seasons, opponent names and the game schedule (date, home or away, location).</li>
             <li>Whether a game is scheduled or analyzed, and a final score if a member typed one.</li>
             <li>Each analyzed game&apos;s log, one row per possession: shots and makes, turnovers, fouls, clock readings and jersey numbers such as #23. The game&apos;s calculated totals and percentages are saved with it too, so every stat tracked is still there later.</li>
+            <li>The name a club member types for themselves, next to the games they are in charge of (&ldquo;Analyzed by Noah&rdquo;), and which games are being analyzed right now. It&apos;s a label for who is doing what, not a login.</li>
           </ul>
           <p>These live in a Supabase database that belongs to the club. Only the app&apos;s server can read it, and an admin can download or delete everything.</p>
         </Card>

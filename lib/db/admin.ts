@@ -20,6 +20,12 @@ export type GameRow = {
   our_score: number | null;
   opp_score: number | null;
   analyzed_at: string | null;
+  /** The club member in charge of this game (typed name). Present after migration 0007. */
+  assigned_to?: string | null;
+  /** When the open analysis last checked in (migration 0004); fresh = someone is analyzing it. */
+  analyzing_since?: string | null;
+  /** 'working' | 'needs_input' | 'failed' while an analysis is open; null otherwise (migration 0007). */
+  analysis_state?: string | null;
   opponent?: { name: string } | null;
 };
 
