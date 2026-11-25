@@ -3,6 +3,7 @@ import { deriveStatus, serverState, statusText, type StatusInput } from "@/lib/a
 import { assignBody, claimBody, memberName, releaseBody } from "@/lib/db/schemas";
 import { saveBody } from "@/lib/db/save-schema";
 import { cleanName } from "@/lib/client/member";
+import { autoSaveScore } from "@/lib/analysis/final-score";
 
 const base: StatusInput = { phase: "idle", hasResults: false, saved: false, savable: true, saving: false, saveFailed: false };
 
@@ -77,5 +78,18 @@ describe("saving from a session", () => {
   it("refuses a claim token that isn't a UUID", () => {
     const bad = saveBody.safeParse({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), claim_token: "me", stat_ids: [], starters: [], log });
     expect(bad.success).toBe(false);
+  });
+});
+
+describe("automatic save keeps the final score", () => {
+  const r = (roslyn: number | null, opponent: number | null) => ({ videoTime: 0, quarter: null, clock: null, roslyn, opponent });
+  it("sends the game's typed score first", () => {
+    expect(autoSaveScore({ roslyn: 61, opponent: 55 }, [r(10, 9)])).toEqual({ roslyn: 61, opponent: 55 });
+  });
+  it("falls back to the last scoreboard reading with both numbers", () => {
+    expect(autoSaveScore({ roslyn: null, opponent: null }, [r(10, 9), r(40, 38), r(41, null)])).toEqual({ roslyn: 40, opponent: 38 });
+  });
+  it("is null when nothing is known, and never invents one", () => {
+    expect(autoSaveScore({ roslyn: null, opponent: null }, [r(null, 3)])).toEqual({ roslyn: null, opponent: null });
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { autoSaveScore } from "@/lib/analysis/final-score";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ApiError, type GeminiFile } from "@/lib/client/api";
 import { saveGameToTeam, type ReopenedGame } from "@/lib/client/save";
@@ -439,7 +440,8 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, initi
       if (team && game && !demo && !testMode && savedClearance.current) {
         setSaving(true);
         try {
-          await persist(result.log, { roslyn: null, opponent: null, starters: starters.roslyn.filter(Boolean), statIds: setup.statIds, auto: true });
+          const score = autoSaveScore(game.scores, result.log.scoreboard);
+          await persist(result.log, { roslyn: score.roslyn, opponent: score.opponent, starters: starters.roslyn.filter(Boolean), statIds: setup.statIds, auto: true });
         } catch (err) {
           setSaveFailed(err instanceof Error ? err.message : "It didn't save.");
         } finally {
