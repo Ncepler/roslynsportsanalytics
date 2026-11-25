@@ -40,28 +40,31 @@ export async function claimGame(gameId: string, token: string, name: string, sta
       .or(`analyzing_token.is.null,analyzing_token.eq.${token},analyzing_since.lt.${claimCutoff()}`)
       .select("id");
   const since = new Date().toISOString();
-  let { data, error } = await tryUpdate({ analyzing_token: token, analyzing_since: since, assigned_to: name, ...(state ? { analysis_state: state } : {}) });
-  // Migration 0007 not run yet: the claim itself still works without the name and the dot.
+  let { data, error } = await tryUpdate({ analyzing_token: token, analyzing_since: since, ...(state ? { analysis_state: state } : {}) });
+  // Migration 0007 not run yet: the claim itself still works without the dot.
   if (error && lockColumnsMissing(error.code)) ({ data, error } = await tryUpdate({ analyzing_token: token, analyzing_since: since }));
   if (error) {
     if (lockColumnsMissing(error.code)) throw new DbError(503, "The database needs its latest update (migration 0004). Ask the admin to run it in Supabase.");
     dbFail(error);
   }
-  return (data ?? []).length > 0;
+  const won = (data ?? []).length > 0;
+  if (won) {
+    // Whoever is in charge stays in charge: the name is written only when nobody is, or when it is already this member.
+    const who = await db().from("games").update({ assigned_to: name }).eq("id", gameId).or(`assigned_to.is.null,assigned_to.eq."${name.replace(/[\\"]/g, "\\$&")}"`);
+    if (who.error && !lockColumnsMissing(who.error.code)) dbFail(who.error);
+  }
+  return won;
 }
 
-/** Clears this tab's claim (and only this tab's). A game that was never analyzed also loses its person in charge. */
+/** Clears this tab's claim (and only this tab's). Who is in charge is never touched here; only the assign route gives a game up. */
 export async function releaseGame(gameId: string, token: string): Promise<void> {
-  const full = await db().from("games").update({ analyzing_token: null, analyzing_since: null, analysis_state: null, assigned_to: null }).eq("id", gameId).eq("analyzing_token", token).eq("status", "scheduled");
+  const full = await db().from("games").update({ analyzing_token: null, analyzing_since: null, analysis_state: null }).eq("id", gameId).eq("analyzing_token", token);
   if (full.error && lockColumnsMissing(full.error.code)) {
     const old = await db().from("games").update({ analyzing_token: null, analyzing_since: null }).eq("id", gameId).eq("analyzing_token", token);
     if (old.error && !lockColumnsMissing(old.error.code)) dbFail(old.error);
     return;
   }
   if (full.error) dbFail(full.error);
-  // An analyzed game keeps its person in charge; only the claim goes.
-  const rest = await db().from("games").update({ analyzing_token: null, analyzing_since: null, analysis_state: null }).eq("id", gameId).eq("analyzing_token", token);
-  if (rest.error && !lockColumnsMissing(rest.error.code)) dbFail(rest.error);
 }
 
 /** Puts a member in charge of a game (name) or gives it up (null), without starting an analysis. */
