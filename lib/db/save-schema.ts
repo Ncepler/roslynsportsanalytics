@@ -83,7 +83,9 @@ export const saveBody = z
   })
   .refine((b) => Boolean(b.game_id) !== Boolean(b.quick), { message: "Choose a game or add one." })
   // Editing a saved game skips the Roslyn-game check, so it may only ever touch an existing game, never create one.
-  .refine((b) => !b.reopen || (Boolean(b.game_id) && !b.quick), { message: "Only a game that was already saved can be edited." });
+  .refine((b) => !b.reopen || (Boolean(b.game_id) && !b.quick), { message: "Only a game that was already saved can be edited." })
+  // A run that logged nothing would wipe the game's stats and mark it analyzed; only an edit of a saved game may send an empty log.
+  .refine((b) => b.reopen || b.log.possessions.length > 0, { message: "This analysis found no possessions, so there is nothing to save." });
 
 export type SaveBody = z.infer<typeof saveBody>;
 

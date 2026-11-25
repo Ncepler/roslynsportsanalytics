@@ -72,11 +72,11 @@ describe("member names and claim input", () => {
 describe("saving from a session", () => {
   const log = { possessions: [], scoreboard: [] };
   it("accepts the claim token and the automatic-save flag", () => {
-    const ok = saveBody.safeParse({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), claim_token: crypto.randomUUID(), auto: true, stat_ids: [], starters: [], log });
+    const ok = saveBody.safeParse({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), claim_token: crypto.randomUUID(), auto: true, reopen: true, stat_ids: [], starters: [], log });
     expect(ok.success).toBe(true);
   });
   it("refuses a claim token that isn't a UUID", () => {
-    const bad = saveBody.safeParse({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), claim_token: "me", stat_ids: [], starters: [], log });
+    const bad = saveBody.safeParse({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), reopen: true, claim_token: "me", stat_ids: [], starters: [], log });
     expect(bad.success).toBe(false);
   });
 });
@@ -91,5 +91,18 @@ describe("automatic save keeps the final score", () => {
   });
   it("is null when nothing is known, and never invents one", () => {
     expect(autoSaveScore({ roslyn: null, opponent: null }, [r(null, 3)])).toEqual({ roslyn: null, opponent: null });
+  });
+});
+
+describe("an empty run is never saved", () => {
+  const ids = () => ({ team_id: crypto.randomUUID(), game_id: crypto.randomUUID(), stat_ids: [], starters: [] });
+  const empty = { possessions: [], scoreboard: [] };
+  it("refuses a new (non-reopen) save with no possessions, in plain words", () => {
+    const r = saveBody.safeParse({ ...ids(), auto: true, log: empty });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toBe("This analysis found no possessions, so there is nothing to save.");
+  });
+  it("still lets a reopened (edited) game save an empty log", () => {
+    expect(saveBody.safeParse({ ...ids(), reopen: true, log: empty }).success).toBe(true);
   });
 });

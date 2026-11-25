@@ -437,7 +437,7 @@ export function AnalyzeFlow({ makeBackend, demo = false, ownerToken, team, initi
       go(4);
       // A finished game saves itself, so Season trends update without anyone pressing a button. Whoever reviews it
       // later can fix a row and save again (that replaces this save). Test runs and the simulation never save.
-      if (team && game && !demo && !testMode && savedClearance.current) {
+      if (team && game && !demo && !testMode && savedClearance.current && result.log.possessions.length > 0) {
         setSaving(true);
         try {
           const score = autoSaveScore(game.scores, result.log.scoreboard);
