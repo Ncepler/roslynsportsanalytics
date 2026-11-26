@@ -23,14 +23,14 @@ async function roleOf(request: Request) {
 export async function refuseUnlessMember(request: Request): Promise<Response | null> {
   const role = await roleOf(request);
   if (!role) return jsonError(401, "Not signed in.");
-  return canUseSite(role) ? null : jsonError(403, "The demo can't use this. Log in with the club password.");
+  return canUseSite(role) ? null : jsonError(403, "Not allowed. Log in with the club password.");
 }
 
-/** Rate limit, JSON errors, and a second role check (members and admins only; the demo role is refused). */
+/** Rate limit, JSON errors, and a second role check (members and admins only). */
 export async function guarded(request: Request, handler: () => Promise<Response>): Promise<Response> {
   const role = await roleOf(request);
   if (!role) return jsonError(401, "Not signed in.");
-  if (!canUseSite(role)) return jsonError(403, "The demo can't use this. Log in with the club password.");
+  if (!canUseSite(role)) return jsonError(403, "Not allowed. Log in with the club password.");
   return guardedInner(request, handler);
 }
 

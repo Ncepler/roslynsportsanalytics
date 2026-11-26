@@ -2,15 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
 
 // Gate for every page and every API route (CLAUDE.md section 3, rule 7), with roles:
-//   demo   -> only the /test simulation (no database, no AI).
 //   member -> everything except /admin and /api/admin/*.
 //   admin  -> everything.
 // Public: /login and /api/auth/*. Next's build assets are excluded by the matcher.
 // The matcher deliberately does not skip paths by file extension, so a route
 // like /api/report.csv can't slip past the gate. API routes check the role again (lib/api.ts).
-const DEMO_STATIC = new Set(["/icon.svg", "/apple-icon.png"]);
-
-const isTestPath = (p: string) => p === "/test" || p.startsWith("/test/");
 const isAdminPath = (p: string) => p === "/admin" || p.startsWith("/admin/") || p === "/api/admin" || p.startsWith("/api/admin/");
 
 // Next ignores the status on a rewrite, so the 403 page is returned from here. Self-contained on purpose.
@@ -47,12 +43,6 @@ export async function proxy(request: NextRequest) {
     const login = new URL("/login", request.url);
     if (pathname !== "/") login.searchParams.set("next", pathname + search);
     return NextResponse.redirect(login);
-  }
-
-  if (role === "demo") {
-    if (isApi) return NextResponse.json({ error: "The demo can't use this. Log in with the club password." }, { status: 403 });
-    if (isTestPath(pathname) || DEMO_STATIC.has(pathname)) return NextResponse.next();
-    return NextResponse.redirect(new URL("/test", request.url));
   }
 
   if (isAdminPath(pathname) && role !== "admin") {

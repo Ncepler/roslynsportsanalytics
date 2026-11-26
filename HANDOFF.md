@@ -12,7 +12,6 @@ Live pages: a team picker, then for each team **Schedule**, **Analyze a game** a
 
 | Sign-in | Password | Can do |
 |---|---|---|
-| Demo | The "Test" button, when `TEST_LOGIN_ROLE` is unset | Only a practice walkthrough with made-up data. Cannot see real data or use the AI. |
 | Member | The club password | See every team, analyze games, save and fix games. |
 | Admin | A separate admin password | Everything a member can, plus the Admin page: teams, seasons, schedules, data download. |
 
@@ -47,10 +46,8 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | `GEMINI_API_KEY` | Lets the site use Gemini (video analysis, schedule screenshots and the Season summary). Google now issues only `AQ.` keys; paste the whole key with nothing cut off. | aistudio.google.com/apikey |
 | `GEMINI_MODEL` | Which Gemini model to use (for everything). If it is wrong, the site names the models your key can use. | Google's model list |
 | `GEMINI_TIER` | `free` or `paid`. `free` shows a banner "don't upload student footage". Switch to `paid` only once billing is set up. | You set it |
-| `ALLOW_TEST_LOGIN` | `true` shows the Test button, which signs anyone in without a password (as the role in `TEST_LOGIN_ROLE`). Use it only until the real passwords are set, then set it to `false`. | You set it |
 | `ADMIN_BYPASS_CODE` | Secret code for the owner test. Leave empty to turn that feature off. | You choose it |
 | `BLOB_READ_WRITE_TOKEN` (or `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`) | Added by Vercel when you connect a Blob store. Used only for the few minutes a video is handed to Gemini. | Vercel → Storage |
-| `TEST_LOGIN_ROLE` | Which sign-in the Test button gives: `admin`, `member` or `demo` (unset = demo). While it is `admin`, anyone with the website address is an admin. Remove it once the real passwords are set. | You set it |
 
 ## Everyday tasks (no coding)
 
@@ -68,7 +65,7 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 
 **Analyze a game.** Team → Analyze a game → pick the game (or add one that isn't on the schedule) → upload the video → trim → check who is playing → Analyze → review → Save game. To fix a saved game later, open it from "Already analyzed" on the same page.
 
-**Change a password.** In Vercel, edit `CLUB_PASSWORD` or `ADMIN_PASSWORD`, then redeploy. Everyone who signed in with the old password is signed out on their next click (each sign-in remembers which password made it). Turning the Test button off, or changing `TEST_LOGIN_ROLE`, signs out everyone who came in through it the same way. To sign out absolutely everyone, change `SESSION_SECRET`.
+**Change a password.** In Vercel, edit `CLUB_PASSWORD` or `ADMIN_PASSWORD`, then redeploy. Everyone who signed in with the old password is signed out on their next click (each sign-in remembers which password made it). There is no password-free login. To sign out absolutely everyone, change `SESSION_SECRET`.
 
 **Download all the data.** Admin → Export all data → Download JSON. Do this before any big change, and a few times a year. Keep the file private.
 
@@ -103,7 +100,7 @@ Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel, database on Supa
 - **Database:** the site has connected to the real Supabase project (the team list loaded). Saving a game, Season trends and the schedule importer have not yet been used against it; they were tested against a stand-in, and the SQL was tested on a real Postgres engine. If a page shows a database message, it says what to fix (wrong address, wrong key, tables missing).
 - **Gemini:** the video analysis, the schedule-picture reader and the Season summary have never completed a run against the real Gemini API. Three setup problems were found and fixed along the way (file addresses, API version `v1beta`, and clearer error messages), so the next real run is the real test.
 - **Vercel Blob** (the temporary video hand-off) has not been proven with a large real video.
-- **Test button:** until the real passwords are set, anyone with the website address can sign in as the role in `TEST_LOGIN_ROLE`. Set `CLUB_PASSWORD` and `ADMIN_PASSWORD`, then set `ALLOW_TEST_LOGIN=false`, delete `TEST_LOGIN_ROLE`, and redeploy.
+- **Passwords:** `CLUB_PASSWORD` and `ADMIN_PASSWORD` must both be set in Vercel. If one is empty, that login always fails. The old `ALLOW_TEST_LOGIN` and `TEST_LOGIN_ROLE` settings are no longer read; delete them from Vercel.
 - One person per game is enforced by a 30-minute claim (migration 0004). Saving over an already analyzed game asks for confirmation.
 - Stored data never expires automatically; an admin deletes games by hand.
 - The Roslyn-only video check (the AI must see "Roslyn" on screen) has not been tried on real game footage and may wrongly reject some games.

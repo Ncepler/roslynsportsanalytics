@@ -5,6 +5,7 @@ import { createOwnerToken, createSessionToken, signToken, verifyOwnerToken, veri
 import { saveBody, toRows } from "@/lib/db/save-schema";
 import { normalizeSupabaseUrl } from "@/lib/db/client";
 import { proxy } from "@/proxy";
+import { POST as loginPost } from "@/app/api/auth/login/route";
 
 const SECRET = "x".repeat(48);
 
@@ -12,8 +13,6 @@ beforeEach(() => {
   process.env.SESSION_SECRET = SECRET;
   process.env.CLUB_PASSWORD = "club-pass";
   process.env.ADMIN_PASSWORD = "admin-pass";
-  process.env.ALLOW_TEST_LOGIN = "false";
-  delete process.env.TEST_LOGIN_ROLE;
 });
 
 describe("login cookies", () => {
@@ -25,18 +24,6 @@ describe("login cookies", () => {
   it("changing the club password logs out everyone who used the old one", async () => {
     const t = await createSessionToken("member", { kind: "password", password: "club-pass" });
     process.env.CLUB_PASSWORD = "new-pass";
-    expect(await verifySessionToken(t)).toBeNull();
-  });
-
-  it("turning the Test button off logs out everyone who got in with it", async () => {
-    process.env.ALLOW_TEST_LOGIN = "true";
-    process.env.TEST_LOGIN_ROLE = "admin";
-    const t = await createSessionToken("admin", { kind: "test" });
-    expect(await verifySessionToken(t)).toBe("admin");
-    process.env.TEST_LOGIN_ROLE = "demo";
-    expect(await verifySessionToken(t)).toBeNull();
-    process.env.TEST_LOGIN_ROLE = "admin";
-    process.env.ALLOW_TEST_LOGIN = "false";
     expect(await verifySessionToken(t)).toBeNull();
   });
 
@@ -122,12 +109,7 @@ describe("SUPABASE_URL cleanup", () => {
 });
 
 describe("the gate in front of every page and API route", () => {
-  const cookieFor = async (role: "member" | "admin" | "demo") => {
-    if (role === "demo") {
-      process.env.ALLOW_TEST_LOGIN = "true";
-      process.env.TEST_LOGIN_ROLE = "demo";
-      return createSessionToken("demo", { kind: "test" });
-    }
+  const cookieFor = async (role: "member" | "admin") => {
     return createSessionToken(role, { kind: "password", password: role === "admin" ? "admin-pass" : "club-pass" });
   };
   const req = (path: string, opts: { cookie?: string; method?: string; origin?: string } = {}) =>
@@ -144,11 +126,11 @@ describe("the gate in front of every page and API route", () => {
     expect((await proxy(req("/api/games/save", { method: "POST" }))).status).toBe(401);
   });
 
-  it("the demo role only sees /test and gets no data", async () => {
-    const c = await cookieFor("demo");
+  it("the /test simulation is open to any signed-in member, and to nobody signed out", async () => {
+    const c = await cookieFor("member");
     expect((await proxy(req("/test", { cookie: c }))).status).toBe(200);
-    expect((await proxy(req("/", { cookie: c }))).headers.get("location")).toBe("https://club.example/test");
-    expect((await proxy(req("/api/games/save", { cookie: c, method: "POST" }))).status).toBe(403);
+    expect((await proxy(req("/test/season", { cookie: c }))).status).toBe(200);
+    expect((await proxy(req("/test"))).status).toBe(307);
   });
 
   it("a member can't reach admin pages or admin API routes", async () => {
@@ -174,5 +156,79 @@ describe("the gate in front of every page and API route", () => {
 
   it("no file-extension trick gets past the gate", async () => {
     expect((await proxy(req("/api/admin/export.json"))).status).toBe(401);
+  });
+});
+
+describe("login API (password only; there is no Test login)", () => {
+  let n = 0;
+  const login = (body: unknown) =>
+    loginPost(
+      new Request("https://club.example/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.9.${Math.floor(++n / 250)}.${n % 250}` },
+        body: JSON.stringify(body),
+      }),
+    );
+
+  it("CLUB_PASSWORD gives a member session and ADMIN_PASSWORD an admin session", async () => {
+    const m = await login({ mode: "password", password: "club-pass" });
+    expect(m.status).toBe(200);
+    expect(await verifySessionToken(m.cookies.get("session")?.value)).toBe("member");
+    const a = await login({ mode: "password", password: "admin-pass" });
+    expect(a.status).toBe(200);
+    expect(await verifySessionToken(a.cookies.get("session")?.value)).toBe("admin");
+  });
+
+  it("a request with mode \"test\" gets no session cookie, even if the old env vars are still set", async () => {
+    process.env.ALLOW_TEST_LOGIN = "true";
+    process.env.TEST_LOGIN_ROLE = "admin";
+    try {
+      for (const body of [{ mode: "test" }, { mode: "test", password: "club-pass" }, { mode: "test", role: "admin" }]) {
+        const res = await login(body);
+        expect(res.status).toBe(400);
+        expect(res.cookies.get("session")).toBeUndefined();
+        expect(res.headers.get("set-cookie")).toBeNull();
+      }
+    } finally {
+      delete process.env.ALLOW_TEST_LOGIN;
+      delete process.env.TEST_LOGIN_ROLE;
+    }
+  });
+
+  it("a wrong password gets no cookie", async () => {
+    const res = await login({ mode: "password", password: "nope" });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it.each([[""], [undefined]])("an empty or unset CLUB_PASSWORD never lets anyone in as a member (password %j)", async (unset) => {
+    if (unset === undefined) delete process.env.CLUB_PASSWORD;
+    else process.env.CLUB_PASSWORD = unset;
+    for (const password of ["", "club-pass", "undefined"]) {
+      const res = await login({ mode: "password", password });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    // The admin password still works on its own.
+    expect((await login({ mode: "password", password: "admin-pass" })).status).toBe(200);
+  });
+
+  it.each([[""], [undefined]])("an empty or unset ADMIN_PASSWORD never lets anyone in as an admin (password %j)", async (unset) => {
+    if (unset === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = unset;
+    for (const password of ["", "admin-pass", "undefined"]) {
+      const res = await login({ mode: "password", password });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    expect((await login({ mode: "password", password: "club-pass" })).status).toBe(200);
+  });
+
+  it("with both passwords empty, every login fails", async () => {
+    process.env.CLUB_PASSWORD = "";
+    process.env.ADMIN_PASSWORD = "";
+    for (const password of ["", " ", "anything"]) {
+      expect((await login({ mode: "password", password })).status).toBe(401);
+    }
   });
 });

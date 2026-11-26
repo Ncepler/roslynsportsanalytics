@@ -9,7 +9,7 @@ import { getRole } from "@/lib/auth/server";
 import { getCurrentSeasonLabel, listActiveTeams, tryDb } from "@/lib/db/read";
 import { shortSeason } from "@/lib/schedule/dates";
 
-// The drawer's team list. Demo users never read the database (they only see the /test simulation).
+// The drawer's team list (members and admins only).
 async function Nav() {
   const role = await getRole();
   if (role !== "member" && role !== "admin") return <AppNav teams={[]} drawer={false} />;

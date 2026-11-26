@@ -8,7 +8,7 @@ export async function getRole(): Promise<Role | null> {
   return verifySessionToken(jar.get(SESSION_COOKIE)?.value);
 }
 
-/** For server components that read stored data: demo and signed-out users never get through. */
+/** For server components that read stored data: signed-out users never get through. */
 export async function requireMember(): Promise<Role> {
   const role = await getRole();
   if (role !== "member" && role !== "admin") redirect("/login");

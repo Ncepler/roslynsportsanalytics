@@ -24,7 +24,7 @@ function TeamLinks({ teams, season }: { teams: TeamRow[]; season: string | null 
 
 export const metadata: Metadata = { title: "Teams · Roslyn Film Analyzer" };
 
-// Home: pick a team. (Demo users are sent to /test by proxy.ts and never reach the database.)
+// Home: pick a team.
 async function Teams() {
   await requireMember();
   const [result, seasonResult] = await Promise.all([tryDb(listActiveTeams), tryDb(getCurrentSeasonLabel)]);

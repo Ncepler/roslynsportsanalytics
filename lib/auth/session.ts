@@ -14,39 +14,30 @@ export const sessionCookieOptions = {
   maxAge: SESSION_TTL_SECONDS,
 } as const;
 
-// Roles (CLAUDE.md, Nov 13): demo sees only the /test simulation; member uses the real site;
-// admin is a member plus /admin. The role is inside the signed cookie, so it can't be edited in the browser.
-export const ROLES = ["demo", "member", "admin"] as const;
+// Roles (CLAUDE.md): member uses the site (including the /test simulation); admin is a member plus /admin.
+// The role is inside the signed cookie, so it can't be edited in the browser.
+export const ROLES = ["member", "admin"] as const;
 export type Role = (typeof ROLES)[number];
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
 
-/** Can this role use the real site (database, Gemini)? Demo cannot. */
+/** Can this role use the site (database, Gemini)? Any signed-in role can. */
 export const canUseSite = (role: Role | null): boolean => role === "member" || role === "admin";
 export const isAdminRole = (role: Role | null): boolean => role === "admin";
 
-// Each cookie carries a short fingerprint of what granted it: the password that was typed, or the Test button
-// setting. On every request the fingerprint must still match the current settings, so changing CLUB_PASSWORD or
-// ADMIN_PASSWORD logs out everyone who used the old one, and turning the Test button off (or changing
-// TEST_LOGIN_ROLE) logs out everyone who got in through it. Cookies without a fingerprint are rejected.
+// Each cookie carries a short fingerprint of the password that granted it. On every request the fingerprint must
+// still match the current CLUB_PASSWORD / ADMIN_PASSWORD, so changing a password logs out everyone who used the
+// old one. Cookies without a fingerprint are rejected.
 type SessionPayload = { exp: number; role: Role; k: string };
 
-/** Test button role: whatever TEST_LOGIN_ROLE says (admin | member | demo), and demo if it is unset or invalid. */
-export function testLoginRole(): Role {
-  const wanted = process.env.TEST_LOGIN_ROLE;
-  return isRole(wanted) ? wanted : "demo";
-}
-
-export const testLoginEnabled = () => process.env.ALLOW_TEST_LOGIN === "true";
-
-export type SessionSource = { kind: "password"; password: string } | { kind: "test" };
+export type SessionSource = { kind: "password"; password: string };
 
 const fingerprintCache = new Map<string, Promise<string>>();
 
 function fingerprint(role: Role, source: SessionSource): Promise<string> {
-  const input = source.kind === "test" ? `test:${role}` : `pw:${role}:${source.password}`;
+  const input = `pw:${role}:${source.password}`;
   let fp = fingerprintCache.get(input);
   if (!fp) {
     fp = getKey()
@@ -63,7 +54,6 @@ async function currentFingerprints(role: Role): Promise<string[]> {
   const out: string[] = [];
   const password = role === "admin" ? process.env.ADMIN_PASSWORD : role === "member" ? process.env.CLUB_PASSWORD : undefined;
   if (password) out.push(await fingerprint(role, { kind: "password", password }));
-  if (testLoginEnabled() && testLoginRole() === role) out.push(await fingerprint(role, { kind: "test" }));
   return out;
 }
 
@@ -131,7 +121,7 @@ export async function verifySessionToken(token: string | undefined): Promise<Rol
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as Partial<SessionPayload>;
     if (typeof payload.exp !== "number" || payload.exp <= Date.now() / 1000) return null;
     if (!isRole(payload.role) || typeof payload.k !== "string") return null;
-    // Still granted by the current password or Test setting? (Both are fixed-length HMAC prefixes.)
+    // Still granted by the current password? (Fixed-length HMAC prefix.)
     return (await currentFingerprints(payload.role)).includes(payload.k) ? payload.role : null;
   } catch {
     return null;
