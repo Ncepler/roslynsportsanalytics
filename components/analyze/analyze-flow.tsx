@@ -1,5 +1,6 @@
 "use client";
 
+import { NO_VIDEO_SECONDS } from "@/lib/demo/constants";
 import { autoSaveScore } from "@/lib/analysis/final-score";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ApiError, type GeminiFile } from "@/lib/client/api";
@@ -41,8 +42,6 @@ const noSubscribe = () => () => {};
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const APPEARANCE_SECONDS = 120;
 const now = () => performance.now();
-/** Length of the sample game when the /test page runs without a video. */
-const NO_VIDEO_SECONDS = 36 * 60;
 
 const basketballDefaults = (): GameSetup => ({
   sportId: "basketball",
