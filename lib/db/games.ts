@@ -31,21 +31,29 @@ const lockColumnsMissing = (code?: string) => code === "42703" || code === "PGRS
  * False when someone else holds a fresh claim. Also the heartbeat: each call refreshes the claim and the state.
  */
 export async function claimGame(gameId: string, token: string, name: string, state?: AnalysisState): Promise<boolean> {
-  const tryUpdate = (patch: Record<string, unknown>) =>
-    db()
-      .from("games")
-      .update(patch)
-      .eq("id", gameId)
-      .eq("status", "scheduled")
-      .or(`analyzing_token.is.null,analyzing_token.eq.${token},analyzing_since.lt.${claimCutoff()}`)
-      .select("id");
+  // "Free, or already mine, or stale" is three separate atomic updates tried in that order, not one update with an
+  // `.or()` filter: older PostgREST versions (12.2.x) re-apply an `.or()` filter to the returned rows and fail with
+  // "column does not exist". Each update is still one atomic statement, so two tabs racing for a free game still
+  // have exactly one winner (the loser's row no longer matches), and a stale claim is still taken over by one tab.
+  const attempts = [
+    (patch: Record<string, unknown>) => db().from("games").update(patch).eq("id", gameId).eq("status", "scheduled").is("analyzing_token", null).select("id"),
+    (patch: Record<string, unknown>) => db().from("games").update(patch).eq("id", gameId).eq("status", "scheduled").eq("analyzing_token", token).select("id"),
+    (patch: Record<string, unknown>) => db().from("games").update(patch).eq("id", gameId).eq("status", "scheduled").lt("analyzing_since", claimCutoff()).select("id"),
+  ];
   const since = new Date().toISOString();
-  let { data, error } = await tryUpdate({ analyzing_token: token, analyzing_since: since, ...(state ? { analysis_state: state } : {}) });
-  // Migration 0007 not run yet: the claim itself still works without the dot.
-  if (error && lockColumnsMissing(error.code)) ({ data, error } = await tryUpdate({ analyzing_token: token, analyzing_since: since }));
-  if (error) {
-    if (lockColumnsMissing(error.code)) throw new DbError(503, "The database needs its latest update (migration 0004). Ask the admin to run it in Supabase.");
-    dbFail(error);
+  let data: { id: unknown }[] | null = null;
+  for (const attempt of attempts) {
+    let res = await attempt({ analyzing_token: token, analyzing_since: since, ...(state ? { analysis_state: state } : {}) });
+    // Migration 0007 not run yet: the claim itself still works without the dot.
+    if (res.error && lockColumnsMissing(res.error.code)) res = await attempt({ analyzing_token: token, analyzing_since: since });
+    if (res.error) {
+      if (lockColumnsMissing(res.error.code)) throw new DbError(503, "The database needs its latest update (migration 0004). Ask the admin to run it in Supabase.");
+      dbFail(res.error);
+    }
+    if ((res.data ?? []).length > 0) {
+      data = res.data;
+      break;
+    }
   }
   const won = (data ?? []).length > 0;
   if (won) {
@@ -219,14 +227,26 @@ export async function saveAnalysis(body: SaveBody, model: string): Promise<{ gam
     sheets: getSport(team.sport) ? allSheets(snapshotLog, body.stat_ids, opponentName, team.sport, body.starters.filter(Boolean) as string[]) : [],
   };
 
+  // The automatic save runs before anyone has looked at the result, so it must never blank a score a person already
+  // typed on this game (the RPC writes whatever it is given). A manual save sends exactly what the person entered.
+  let ourScore = body.our_score ?? null;
+  let oppScore = body.opp_score ?? null;
+  if (body.auto && ourScore === null && oppScore === null) {
+    const existing = await db().from("games").select("our_score, opp_score").eq("id", gameId).maybeSingle();
+    if (!existing.error && existing.data) {
+      ourScore = (existing.data.our_score as number | null) ?? null;
+      oppScore = (existing.data.opp_score as number | null) ?? null;
+    }
+  }
+
   const { error } = await db().rpc("save_game_analysis", {
     p_game_id: gameId,
     p_model: model,
     p_schema_version: SCHEMA_VERSION,
     // A file name can contain a student's name ("Jaylen 30 pt game.mp4"), so it is never stored.
     p_source_filename: null,
-    p_our_score: body.our_score ?? null,
-    p_opp_score: body.opp_score ?? null,
+    p_our_score: ourScore,
+    p_opp_score: oppScore,
     p_meta: { stat_ids: body.stat_ids, starters: body.starters.filter(Boolean), scoreboard: body.log.scoreboard, stats_snapshot: statsSnapshot, auto_saved: body.auto === true },
     p_possessions: toRows(body.log.possessions),
   });
