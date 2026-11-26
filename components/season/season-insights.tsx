@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { AccuracyNote } from "@/components/accuracy-note";
 import { seasonSources, type GameExtras, type SeasonSource } from "@/lib/season/extras";
 import { MIN_ABS_R, MIN_GAMES } from "@/lib/season/stats";
 import type { WorkedItem } from "@/lib/season/model";
@@ -37,6 +38,7 @@ export function WorkedAndNot({ worked, notWorked, games, withScores }: { worked:
   return (
     <section>
       <h2 className="text-xl font-semibold tracking-[-0.01em]">What has worked this season, and what hasn&apos;t</h2>
+      <AccuracyNote className="mt-1" />
       <p className="mt-1 max-w-[44rem] text-sm text-muted tabular-nums">
         From the trends tested below, shown only with at least {MIN_GAMES} games and a correlation of at least {MIN_ABS_R}. Compared against the point margin when final scores are entered ({withScores} of {games} games), otherwise against offensive efficiency.
         &quot;Went with&quot; never means one caused the other.
@@ -89,6 +91,7 @@ export function ScoringSources({ extras, opponentLabel = "Opponents" }: { extras
   return (
     <section>
       <h2 className="text-xl font-semibold tracking-[-0.01em]">Where the points came from, all season</h2>
+      <AccuracyNote className="mt-1" />
       <p className="mt-1 max-w-[44rem] text-sm text-muted tabular-nums">
         Share of each team&apos;s points from each source, {extras.length} games combined ({roslyn.total} Roslyn points, {opp.total} for opponents). One shot can count in more than one source (a 3-pointer from above the break is both), so shares add up to more than 100%. Sources with under 10 points are left out.
       </p>

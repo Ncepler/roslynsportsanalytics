@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { GameSetup } from "@/lib/gemini/prompt";
 import { getRegistrySport, isStatSelectable } from "@/lib/sports/registry";
 import { eventsToTsv, formatClock, tallyByStat, type RegistryLog } from "@/lib/sports/registry-log";
+import { AccuracyNote } from "@/components/accuracy-note";
 import { CopyButton } from "./copy-button";
 
 const th = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.04em] text-muted";
@@ -41,6 +42,9 @@ export function RegistryReview({ log, onLog, setup, onSeek, demo }: { log: Regis
 
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Stats</h2>
+        <AccuracyNote className="mt-1">
+          {flagged > 0 && <p className="mt-1 text-xs font-medium text-warning-text tabular-nums">{flagged} event{flagged === 1 ? "" : "s"} near a chunk edge need a second look (check for repeats).</p>}
+        </AccuracyNote>
         <p className="hint mt-1 mb-3">How many logged events count toward each stat you picked, by team. The app counts them from the log below. Fix the log and these update.</p>
         <div className="overflow-x-auto rounded-[0.75rem] border border-border">
           <table className="w-full border-collapse text-sm tabular-nums">
@@ -83,6 +87,7 @@ export function RegistryReview({ log, onLog, setup, onSeek, demo }: { log: Regis
           <h2 className="text-xl font-semibold tracking-[-0.01em]">Event log</h2>
           <CopyButton text={() => eventsToTsv(log.events)} />
         </div>
+        <AccuracyNote className="mt-1" />
         <p className="hint mt-1 mb-3">
           {log.events.length} event{log.events.length === 1 ? "" : "s"}
           {flagged > 0 ? `, ${flagged} near a chunk edge (check for repeats)` : ""}. Tap a time to jump the video there. Remove any event that is wrong.

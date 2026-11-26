@@ -1,5 +1,6 @@
 "use client";
 
+import { AccuracyNote } from "@/components/accuracy-note";
 import { GameStatsView } from "@/components/game/game-stats-view";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -81,8 +82,6 @@ export function ReviewStep({
   return (
     <div className="space-y-10">
       <FirstAnalysisMoment demo={demo} />
-      <ScoreboardBanner checks={checks} flagged={flagged} />
-
       {playerNotes && <PlayerNotesCheck notes={playerNotes} />}
 
       {log.warnings.length > 0 && (
@@ -99,11 +98,12 @@ export function ReviewStep({
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Game stats</h2>
         <p className="hint mt-1 mb-4">Every number is worked out by the app from the possession log below. Fix the log and these update.</p>
-        <GameStatsView log={log} sportId={setup.sportId} statIds={setup.statIds} away={away} demo={demo} />
+        <GameStatsView log={log} sportId={setup.sportId} statIds={setup.statIds} away={away} demo={demo} checkMarkers={<ScoreboardBanner checks={checks} flagged={flagged} />} />
       </section>
 
       <details>
         <summary className="cursor-pointer text-xl font-semibold tracking-[-0.01em]">More numbers</summary>
+        <AccuracyNote className="mt-3" />
         <div className="mt-4 grid gap-8 lg:grid-cols-2">
           {on("score-by-quarter") && <QuarterTable title="Score by quarter" data={scoreByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
           {on("pace") && <QuarterTable title="Possessions by quarter" data={paceByQuarter(log)} quarters={quartersIn(log)} away={away} total />}
@@ -133,6 +133,7 @@ export function ReviewStep({
 
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Possession log</h2>
+        <AccuracyNote className="mt-1" />
         <p className="hint mt-1">
           Click a row to jump the video there. Rows marked <span className="font-medium text-warning-text">Check</span> are low-confidence or in a quarter that failed the scoreboard check.
         </p>
@@ -143,6 +144,7 @@ export function ReviewStep({
 
       <section>
         <h2 className="text-xl font-semibold tracking-[-0.01em]">Sheets</h2>
+        <AccuracyNote className="mt-1" />
         <p className="hint mt-1">Copy pastes straight into the matching cells of the club&apos;s Google Sheet. Blank means the stat wasn&apos;t tracked.</p>
         <div className="mt-4 space-y-8">
           {sheets.map((s) => (

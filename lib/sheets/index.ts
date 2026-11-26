@@ -2,6 +2,7 @@
 // plus tab-separated (Copy for Google Sheets) and CSV output.
 // Numbers stay numbers; a stat that wasn't tracked stays blank, never 0.
 
+import { accuracyText } from "@/lib/accuracy";
 import {
   defenseByContext,
   formatMSS,
@@ -186,7 +187,7 @@ const cellText = (c: Cell) => (c === null ? "" : String(c));
 
 /** Tab-separated: pastes straight into Google Sheets cells. */
 export function toTSV(sheet: Sheet): string {
-  return [...sheet.header, ...sheet.rows].map((r) => r.map((c) => cellText(c).replace(/[\t\n]/g, " ")).join("\t")).join("\n");
+  return [[accuracyText()], ...sheet.header, ...sheet.rows].map((r) => r.map((c) => cellText(c).replace(/[\t\n]/g, " ")).join("\t")).join("\n");
 }
 
 export function toCSV(sheet: Sheet): string {
@@ -194,5 +195,5 @@ export function toCSV(sheet: Sheet): string {
     const s = cellText(c);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  return [...sheet.header, ...sheet.rows].map((r) => r.map(esc).join(",")).join("\r\n");
+  return [[accuracyText()], ...sheet.header, ...sheet.rows].map((r) => r.map(esc).join(",")).join("\r\n");
 }

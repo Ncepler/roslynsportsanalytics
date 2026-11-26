@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import { AccuracyNote } from "@/components/accuracy-note";
 import { scoreStrip, teamCompare } from "@/lib/derive/game-stats";
 import type { PossessionLog } from "@/lib/gemini/log-types";
 import { getSport } from "@/lib/sports";
@@ -66,12 +67,13 @@ function ScoreStrip({ log, away, periodName }: { log: PossessionLog; away: strin
  * The game stats page: score strip, head-to-head team stats, shot chart by zone, and the strategy notes. Every
  * number comes from the possession log (lib/derive/game-stats.ts), so editing the log updates all of it.
  */
-export function GameStatsView({ log, sportId, statIds, away, demo = false }: { log: PossessionLog; sportId: string; statIds: string[]; away: string; demo?: boolean }) {
+export function GameStatsView({ log, sportId, statIds, away, demo = false, checkMarkers }: { log: PossessionLog; sportId: string; statIds: string[]; away: string; demo?: boolean; /** The "needs a second look" markers, shown next to the accuracy note. */ checkMarkers?: ReactNode }) {
   const sport = getSport(sportId);
   const rows = useMemo(() => teamCompare(log, sportId, statIds), [log, sportId, statIds]);
   const showChart = Boolean(sport?.shotZones && (sportId === "ice-hockey" || statIds.includes("shot-zone")));
   return (
     <div className="space-y-6">
+      <AccuracyNote className="space-y-3">{checkMarkers}</AccuracyNote>
       <ScoreStrip log={log} away={away} periodName={sport?.periodName ?? "Quarter"} />
       <Block title="Team stats">
         <TeamStatsCompare rows={rows} away={away} />

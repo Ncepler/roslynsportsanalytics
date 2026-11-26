@@ -1,5 +1,7 @@
 "use client";
 
+import { AccuracyNote } from "@/components/accuracy-note";
+import { accuracyText } from "@/lib/accuracy";
 import { ScoringSources, WorkedAndNot } from "./season-insights";
 import type { GameExtras } from "@/lib/season/extras";
 import { useMemo, useState } from "react";
@@ -137,6 +139,7 @@ export function SeasonResults({
   setScores,
   demo,
   readOnlyScores = false,
+  accuracyNote = true,
 }: {
   games: Game[];
   sport: Sport;
@@ -145,6 +148,8 @@ export function SeasonResults({
   demo: boolean;
   /** Stored games carry their typed final scores; they are changed by editing the game, not here. */
   readOnlyScores?: boolean;
+  /** The accuracy note at the top. The stored Season shows its own, next to the "needs a second look" markers. */
+  accuracyNote?: boolean;
 }) {
   const pairs = useMemo(() => testPairs(games, sport, scores), [games, sport, scores]);
   const ctx = useMemo(() => byContextSeason(games, sport), [games, sport]);
@@ -184,14 +189,15 @@ export function SeasonResults({
   async function download() {
     const { default: writeExcelFile } = await import("write-excel-file/browser");
     const head = (xs: string[]) => xs.map((value) => ({ value, fontWeight: "bold" as const }));
+    const note = [{ value: accuracyText() }];
     const gameRows = games.map((g, i) => [g.name, perGame[i].possessions, perGame[i].points, perGame[i].value === null ? null : Number(perGame[i].value!.toFixed(2)), scores[g.key]?.roslyn ?? null, scores[g.key]?.opponent ?? null]);
     const blob = await writeExcelFile([
       {
         sheet: "Games",
-        data: [head(["Game", sport === "basketball" ? "Possessions" : "Opponent possessions", sport === "basketball" ? "Points" : "Roslyn turnovers", lineLabel, "Roslyn score", "Opponent score"]), ...gameRows],
+        data: [note, head(["Game", sport === "basketball" ? "Possessions" : "Opponent possessions", sport === "basketball" ? "Points" : "Roslyn turnovers", lineLabel, "Roslyn score", "Opponent score"]), ...gameRows],
       },
-      { sheet: "By situation", data: [head(["Situation", "Possessions", compUnit]), ...ctx.map((c) => [CONTEXT_NAME[c.context], c.possessions, c.value === null ? null : Number(c.value.toFixed(2))])] },
-      { sheet: "Pairs tested", data: [head(["Stat", "Compared with", "r", "Games", "Shown as a trend"]), ...pairs.map((p) => [p.x.label, p.y.label, p.r === null ? null : Number(p.r.toFixed(3)), p.n, p.passes ? "Yes" : "No"])] },
+      { sheet: "By situation", data: [note, head(["Situation", "Possessions", compUnit]), ...ctx.map((c) => [CONTEXT_NAME[c.context], c.possessions, c.value === null ? null : Number(c.value.toFixed(2))])] },
+      { sheet: "Pairs tested", data: [note, head(["Stat", "Compared with", "r", "Games", "Shown as a trend"]), ...pairs.map((p) => [p.x.label, p.y.label, p.r === null ? null : Number(p.r.toFixed(3)), p.n, p.passes ? "Yes" : "No"])] },
     ] as never).toBlob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -203,6 +209,7 @@ export function SeasonResults({
 
   return (
     <div className="space-y-12">
+      {accuracyNote && <AccuracyNote />}
       <section>
         <div className="grid grid-cols-3 gap-4 border-y border-border py-4 sm:max-w-xl">
           <div>

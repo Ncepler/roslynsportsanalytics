@@ -1,6 +1,7 @@
 // Generic event log for sports without a possession pipeline. The AI logs events and says which wanted stats each
 // counts toward; code counts them. Nothing here computes a percentage: the registry's formulas need more than
 // event counts, so this screen shows how many supporting events were logged per stat, and a person reviews them.
+import { accuracyText } from "@/lib/accuracy";
 import type { LoggedEvent } from "./request-builder";
 import type { Sport, Stat } from "./registry-types";
 
@@ -65,5 +66,5 @@ export const formatClock = (seconds: number) => `${Math.floor(seconds / 60)}:${S
 /** Tab-separated rows for pasting into Google Sheets. */
 export function eventsToTsv(events: RegistryEvent[]): string {
   const rows = [["Video time", "Period", "Team", "Event", "Counts toward", "Needs review"], ...events.map((e) => [formatClock(e.timestampSeconds), e.period ?? "", e.team ?? "", e.type, (e.statIds ?? []).join(", "), e.needsReview ? "yes" : ""])];
-  return rows.map((r) => r.join("\t")).join("\n");
+  return [[accuracyText()], ...rows].map((r) => r.join("\t")).join("\n");
 }
