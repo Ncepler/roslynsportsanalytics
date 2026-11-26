@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveStatus, serverState, statusText, type StatusInput } from "@/lib/analysis/status";
+import { claimAction, deriveStatus, serverState, statusText, type StatusInput } from "@/lib/analysis/status";
 import { assignBody, claimBody, memberName, releaseBody } from "@/lib/db/schemas";
 import { saveBody } from "@/lib/db/save-schema";
 import { cleanName } from "@/lib/client/member";
@@ -104,5 +104,19 @@ describe("an empty run is never saved", () => {
   });
   it("still lets a reopened (edited) game save an empty log", () => {
     expect(saveBody.safeParse({ ...ids(), reopen: true, log: empty }).success).toBe(true);
+  });
+});
+
+describe("a failed run never leaves a game claimed", () => {
+  it("gives the game back when the run failed or the video wasn't a Roslyn game", () => {
+    expect(claimAction(deriveStatus({ ...base, phase: "error" }), false)).toBe("release");
+    expect(claimAction(deriveStatus({ ...base, phase: "rejected" }), false)).toBe("release");
+  });
+  it("keeps the claim fresh while the member is working or reviewing, and does nothing once saved", () => {
+    expect(claimAction("working", false)).toBe("refresh");
+    expect(claimAction("needs_you", false)).toBe("refresh");
+    expect(claimAction("done", false)).toBe("refresh");
+    expect(claimAction("done", true)).toBe("none");
+    expect(claimAction("failed", true)).toBe("none");
   });
 });

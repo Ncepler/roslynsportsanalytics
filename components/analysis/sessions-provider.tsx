@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SessionStatus } from "@/lib/analysis/status";
-import { serverState } from "@/lib/analysis/status";
+import { claimAction, serverState } from "@/lib/analysis/status";
 import { api, ApiError } from "@/lib/client/api";
 import { getMemberName } from "@/lib/client/member";
 import type { ReopenedGame } from "@/lib/client/save";
@@ -127,17 +127,25 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     const name = getMemberName();
     if (!name) return;
     for (const s of sessionsRef.current) {
-      if (!s.claimToken || !s.game.id || s.saved) continue;
+      if (!s.claimToken || !s.game.id) continue;
+      const action = claimAction(s.status, s.saved);
+      if (action === "none") continue;
+      // A run that failed (error, or not a Roslyn game) gives the game back right away, so nobody is locked out of it
+      // while this tab sits on the error. Pressing Analyze again claims it again (the same token wins if still free).
+      if (action === "release") {
+        releaseClaim(s);
+        continue;
+      }
       const state = serverState(s.status) ?? undefined;
       void api(`/api/games/${s.game.id}/claim`, { body: { token: s.claimToken, name, state } }).catch(() => {});
     }
-  }, [signature]);
+  }, [signature, releaseClaim]);
   useEffect(() => {
     const timer = setInterval(() => {
       const name = getMemberName();
       if (!name) return;
       for (const s of sessionsRef.current) {
-        if (!s.claimToken || !s.game.id || s.saved) continue;
+        if (!s.claimToken || !s.game.id || claimAction(s.status, s.saved) !== "refresh") continue;
         void api(`/api/games/${s.game.id}/claim`, { body: { token: s.claimToken, name, state: serverState(s.status) ?? undefined } }).catch(() => {});
       }
     }, HEARTBEAT_MS);

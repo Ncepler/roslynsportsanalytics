@@ -57,6 +57,16 @@ export function statusText(i: StatusInput & { step: number }): string {
   return "Needs you: press Analyze";
 }
 
+/**
+ * What a session does with its game's claim. A run that failed (error, or not a Roslyn game) gives the game back at
+ * once, so nobody is locked out while the tab sits on the error; everything unfinished keeps the claim fresh; a saved
+ * game has no claim left to manage.
+ */
+export function claimAction(status: SessionStatus, saved: boolean): "release" | "refresh" | "none" {
+  if (saved) return "none";
+  return status === "failed" ? "release" : "refresh";
+}
+
 /** What the server remembers (for everyone else's schedule view). Saved or finished analyses clear it. */
 export function serverState(status: SessionStatus): AnalysisState | null {
   if (status === "working") return "working";

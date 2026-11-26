@@ -1,6 +1,7 @@
 // Browser-side helpers for the app's own API routes.
 
 import { upload, uploadPresigned } from "@vercel/blob/client";
+import { OVER_LIMIT_MESSAGE } from "@/lib/gemini/limits";
 
 export class ApiError extends Error {
   constructor(
@@ -74,6 +75,7 @@ export async function uploadToGemini(file: File, onProgress: (fraction: number) 
     const raw = err instanceof Error ? err.message : "";
     // The SDK's own wording for "the server wouldn't give me upload permission" means a Blob setup problem, not a bad file.
     if (/client token|presigned|webhook public key/i.test(raw)) throw new ApiError("The server couldn't start the upload. Check that the Blob store is connected to this project (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN, and BLOB_WEBHOOK_PUBLIC_KEY for newer stores), then redeploy.", 0);
+    if (/maximum|too large|exceed|size limit/i.test(raw)) throw new ApiError(OVER_LIMIT_MESSAGE, 413);
     throw new ApiError(raw || "The upload failed. Try again.", 0);
   }
   const parsed = await api<{ file?: { name?: string; uri?: string; mimeType?: string; state?: string } }>("/api/gemini/import", { body: { blobUrl: blob.url, mimeType, access } });

@@ -3,6 +3,9 @@
 /** 2 GB: the safe Files API limit until a bigger upload is tested (CLAUDE.md section 16). */
 export const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 
+/** Said wherever a video is over the limit (the upload box, the server). Says how to make it smaller. */
+export const OVER_LIMIT_MESSAGE = "That video is over 2 GB. Make it smaller and choose it again: export it at a lower resolution (720p is plenty), or trim off the parts before and after the game first.";
+
 /** Longest stretch of video analyzed in one run (cost guard, section 6). */
 export const MAX_RUN_SECONDS = 2 * 60 * 60;
 

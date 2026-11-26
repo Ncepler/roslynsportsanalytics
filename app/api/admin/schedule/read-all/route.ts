@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { dbFail } from "@/lib/db/errors";
 import { parse, readAllBody } from "@/lib/db/schemas";
 import { generateJson, generateJsonFromFile, googleErrorOf } from "@/lib/gemini/client";
+import { statusOf } from "@/lib/gemini/errors";
 import { scheduleAllPrompt, SCHEDULE_ALL_SCHEMA, toAllTeamDrafts, type KnownTeam } from "@/lib/schedule/read-all";
 
 export const maxDuration = 120;
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
         ? await generateJsonFromFile({ prompt: scheduleAllPrompt(season.label), mimeType: input.file.mediaType, data: input.file.data, schema: SCHEDULE_ALL_SCHEMA })
         : await generateJson({ prompt: scheduleAllPrompt(season.label, input.text), schema: SCHEDULE_ALL_SCHEMA, temperature: 0 });
     } catch (err) {
+      // Out of credit, rate limited or a refused key get their own plain message from the shared handler.
+      if ([401, 402, 403, 429].includes(statusOf(err) ?? 0)) throw err;
       // Say what Google itself said (never the key), so a refusal can be fixed instead of guessed at.
       const said = googleErrorOf(err)?.message ?? (err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 300) : "");
       console.error("schedule read-all failed:", said);

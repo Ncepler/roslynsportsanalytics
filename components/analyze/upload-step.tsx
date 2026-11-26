@@ -2,7 +2,7 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { normalizeVideoType } from "@/lib/client/api";
-import { isAllowedVideoType, MAX_UPLOAD_BYTES } from "@/lib/gemini/limits";
+import { isAllowedVideoType, MAX_UPLOAD_BYTES, OVER_LIMIT_MESSAGE } from "@/lib/gemini/limits";
 import { SportPicker } from "./sport-picker";
 
 export function UploadStep({ onPick, onNoVideo, demo = false, sport }: { onPick: (file: File) => void; onNoVideo?: () => void; demo?: boolean; /** When given, the sport is asked first and the video can only be chosen after. */ sport?: { value: string | null; onPick: (sportId: string) => void } }) {
@@ -18,7 +18,7 @@ export function UploadStep({ onPick, onNoVideo, demo = false, sport }: { onPick:
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      setError("That video is over 2 GB. Trim or compress it first.");
+      setError(OVER_LIMIT_MESSAGE);
       return;
     }
     setError(null);

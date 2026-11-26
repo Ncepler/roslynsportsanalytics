@@ -2,9 +2,11 @@
 // Prices are USD per 1M tokens, paid tier, standard (not batch). Swap a sport's model by editing its
 // `analysis.defaultModel` (generated from the doc table) or the override in lib/sports/overrides.ts.
 //
-// TODO: apiModelId strings could not be checked against ai.google.dev/gemini-api/docs/pricing (that host is
-// not reachable from the build environment). Strings marked apiModelIdConfirmed: false are the names listed
-// in CLAUDE.md section 16 or, where none is listed, the display name. Confirm each before relying on it.
+// API ids (checked 2026-11-26 against Google's model, pricing and deprecation pages, by search; the pages themselves
+// are blocked from the build sandbox): gemini-4-argon, gemini-3.8-flash, gemini-3.6-flash and gemini-3.5-flash-lite
+// are confirmed (apiModelIdConfirmed: true). The older models below are not used by any sport; their ids are the
+// usual lowercase form and are NOT confirmed. Google's docs now point new projects at 3.5 Flash-Lite or 3.8 Flash,
+// and the 3.x preview models can be retired without much warning.
 import type { ModelConfig, PriceRow } from "./registry-types";
 
 const DEFAULT_RES = { tokensPerFrame: 66, audioTokensPerSecond: 32, batchDiscount: 0.5 } as const;
@@ -19,8 +21,8 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-4-argon",
     displayName: "Gemini 4 Argon",
-    apiModelId: "gemini-4-argon", // TODO confirm
-    apiModelIdConfirmed: false,
+    apiModelId: "gemini-4-argon",
+    apiModelIdConfirmed: true,
     ...DEFAULT_RES,
     supportsAgentic: true,
     freeTier: false,
@@ -30,8 +32,8 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3.8-flash",
     displayName: "Gemini 3.8 Flash",
-    apiModelId: "gemini-3.8-flash", // TODO confirm
-    apiModelIdConfirmed: false,
+    apiModelId: "gemini-3.8-flash",
+    apiModelIdConfirmed: true,
     ...DEFAULT_RES,
     supportsAgentic: true,
     freeTier: true,
@@ -41,8 +43,8 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3.6-flash",
     displayName: "Gemini 3.6 Flash",
-    apiModelId: "gemini-3.6-flash", // TODO confirm
-    apiModelIdConfirmed: false,
+    apiModelId: "gemini-3.6-flash",
+    apiModelIdConfirmed: true,
     ...DEFAULT_RES,
     supportsAgentic: true,
     freeTier: true,
@@ -52,8 +54,8 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3.5-flash-lite",
     displayName: "Gemini 3.5 Flash-Lite",
-    apiModelId: "gemini-3.5-flash-lite", // TODO confirm
-    apiModelIdConfirmed: false,
+    apiModelId: "gemini-3.5-flash-lite",
+    apiModelIdConfirmed: true,
     ...DEFAULT_RES,
     supportsAgentic: true,
     freeTier: true,
@@ -63,7 +65,7 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3.1-flash-lite",
     displayName: "Gemini 3.1 Flash-Lite",
-    apiModelId: "Gemini 3.1 Flash-Lite", // TODO confirm API string; display name used
+    apiModelId: "gemini-3.1-flash-lite-preview", // NOT confirmed (was the display name, which is not a valid API id)
     apiModelIdConfirmed: false,
     ...DEFAULT_RES,
     supportsAgentic: false,
@@ -74,7 +76,7 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3.1-pro-preview",
     displayName: "Gemini 3.1 Pro (Preview)",
-    apiModelId: "Gemini 3.1 Pro (Preview)", // TODO confirm API string; display name used
+    apiModelId: "gemini-3.1-pro-preview", // NOT confirmed (was the display name, which is not a valid API id)
     apiModelIdConfirmed: false,
     ...DEFAULT_RES,
     supportsAgentic: false,
@@ -85,7 +87,7 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-3-flash-preview",
     displayName: "Gemini 3 Flash (Preview, legacy)",
-    apiModelId: "Gemini 3 Flash (Preview)", // TODO confirm API string; display name used
+    apiModelId: "gemini-3-flash-preview", // NOT confirmed (was the display name, which is not a valid API id)
     apiModelIdConfirmed: false,
     ...DEFAULT_RES,
     supportsAgentic: false,
@@ -96,7 +98,7 @@ export const MODELS: ModelConfig[] = [
   {
     id: "gemini-2.5-flash-lite",
     displayName: "Gemini 2.5 Flash-Lite (old)",
-    apiModelId: "Gemini 2.5 Flash-Lite", // TODO confirm API string; display name used
+    apiModelId: "gemini-2.5-flash-lite", // listed on Google's model pages; Vertex lists an Oct 2026 retirement, the Gemini API says none announced
     apiModelIdConfirmed: false,
     tokensPerFrame: 256, // older model: about 4x the tokens per frame
     audioTokensPerSecond: 32, // TODO confirm; the doc gives no separate figure for this model

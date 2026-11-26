@@ -2,7 +2,8 @@ import { del, get, list } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { guarded, jsonError, readJson } from "@/lib/api";
 import { startResumableUpload } from "@/lib/gemini/client";
-import { MAX_UPLOAD_BYTES, isAllowedVideoType } from "@/lib/gemini/limits";
+import { geminiStatusMessage } from "@/lib/gemini/errors";
+import { MAX_UPLOAD_BYTES, OVER_LIMIT_MESSAGE, isAllowedVideoType } from "@/lib/gemini/limits";
 
 export const maxDuration = 300;
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
       if (!source || source.statusCode !== 200 || !source.stream) return jsonError(502, "Couldn't read the uploaded video. Try again.");
       const size = source.blob.size;
       if (!Number.isInteger(size) || size <= 0) return jsonError(502, "Couldn't read the uploaded video. Try again.");
-      if (size > MAX_UPLOAD_BYTES) return jsonError(413, "That video is over 2 GB. Trim or compress it first.");
+      if (size > MAX_UPLOAD_BYTES) return jsonError(413, OVER_LIMIT_MESSAGE);
 
       const { uploadUrl } = await startResumableUpload({ size, mimeType, displayName: `game-${Date.now()}` });
       const res = await fetch(uploadUrl, {
@@ -43,6 +44,11 @@ export async function POST(request: Request) {
         duplex: "half",
       });
       const text = await res.text();
+      if (!res.ok) {
+        // Out of credit, rate limited or a refused key: say so in plain words (the video is not sent twice; try again).
+        const plain = geminiStatusMessage(res.status);
+        if (plain) return jsonError(res.status === 402 ? 402 : res.status === 429 ? 429 : 503, plain);
+      }
       if (!res.ok) return jsonError(502, `Gemini rejected the upload (HTTP ${res.status}${text ? `: ${text.replace(/\s+/g, " ").slice(0, 200)}` : ""}).`);
       let file: unknown;
       try {

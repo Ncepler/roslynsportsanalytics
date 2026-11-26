@@ -3,6 +3,7 @@
 import { GoogleGenAI, PartMediaResolutionLevel } from "@google/genai";
 import { DEFAULT_MODEL_ID, getModel } from "@/lib/sports/models";
 import { getRegistrySport, modelForSport } from "@/lib/sports/registry";
+import { plainGeminiFailure, withGeminiRetry } from "./errors";
 import type { PossessionLog } from "./log-types";
 
 export const GEMINI_HOST = "https://generativelanguage.googleapis.com";
@@ -110,17 +111,22 @@ const seconds = (s: number) => `${Math.max(0, s).toFixed(1)}s`;
  * Vercel and the key never reaches the browser.
  */
 export async function startResumableUpload(opts: { size: number; mimeType: string; displayName: string }) {
-  const res = await fetch(`${GEMINI_HOST}/upload/${GEMINI_API_VERSION}/files`, {
-    method: "POST",
-    headers: {
-      "x-goog-api-key": apiKey(),
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(opts.size),
-      "X-Goog-Upload-Header-Content-Type": opts.mimeType,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ file: { display_name: opts.displayName } }),
+  const res = await withGeminiRetry(async () => {
+    const r = await fetch(`${GEMINI_HOST}/upload/${GEMINI_API_VERSION}/files`, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey(),
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(opts.size),
+        "X-Goog-Upload-Header-Content-Type": opts.mimeType,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file: { display_name: opts.displayName } }),
+    });
+    // Only a rate limit is worth retrying; withGeminiRetry looks at .status. Anything else is read below.
+    if (r.status === 429) throw Object.assign(new Error("Gemini rate limit (HTTP 429)."), { status: 429 });
+    return r;
   });
   const uploadUrl = res.headers.get("x-goog-upload-url");
   if (!res.ok || !uploadUrl) {
@@ -132,17 +138,17 @@ export async function startResumableUpload(opts: { size: number; mimeType: strin
 }
 
 export async function getFile(name: string) {
-  const file = await gemini().files.get({ name });
+  const file = await withGeminiRetry(() => gemini().files.get({ name }));
   return { name: file.name, uri: file.uri, mimeType: file.mimeType, state: file.state, error: file.error?.message ?? null };
 }
 
 export async function deleteFile(name: string) {
-  await gemini().files.delete({ name });
+  await withGeminiRetry(() => gemini().files.delete({ name }));
 }
 
 /** Real token count for a time range of an uploaded video at a resolution. */
 export async function countVideoTokens(opts: { uri: string; mimeType: string; start: number; end: number; resolution: Resolution; fps?: number; model?: string }) {
-  const res = await gemini().models.countTokens({
+  const res = await withGeminiRetry(() => gemini().models.countTokens({
     model: opts.model ?? geminiModel(),
     contents: [
       {
@@ -158,25 +164,25 @@ export async function countVideoTokens(opts: { uri: string; mimeType: string; st
         ],
       },
     ],
-  });
+  }));
   return res.totalTokens ?? null;
 }
 
 /** One short, text-only request that must answer in JSON matching `schema` (no video, nothing stored by Gemini). */
 export async function generateJson(opts: { prompt: string; schema: Record<string, unknown>; temperature?: number }): Promise<string> {
-  const interaction = await gemini().interactions.create({
+  const interaction = await withGeminiRetry(() => gemini().interactions.create({
     model: geminiModel(),
     store: false,
     input: [{ type: "text", text: opts.prompt }],
     generation_config: { temperature: opts.temperature ?? 0.2 },
     response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
-  });
+  }));
   return interaction.output_text ?? "";
 }
 
 /** One request with up to a few pictures that must answer in JSON matching `schema` (nothing stored by Gemini). */
 export async function generateJsonFromImages(opts: { prompt: string; images: { mediaType: string; data: string }[]; schema: Record<string, unknown> }): Promise<string> {
-  const interaction = await gemini().interactions.create({
+  const interaction = await withGeminiRetry(() => gemini().interactions.create({
     model: geminiModel(),
     store: false,
     input: [
@@ -185,7 +191,7 @@ export async function generateJsonFromImages(opts: { prompt: string; images: { m
     ],
     generation_config: { temperature: 0 },
     response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
-  });
+  }));
   return interaction.output_text ?? "";
 }
 
@@ -194,13 +200,13 @@ export async function generateJsonFromFile(opts: { prompt: string; mimeType: str
   const part = opts.mimeType.startsWith("image/")
     ? { type: "image" as const, data: opts.data, mime_type: opts.mimeType as "image/jpeg" }
     : { type: "document" as const, data: opts.data, mime_type: opts.mimeType };
-  const interaction = await gemini().interactions.create({
+  const interaction = await withGeminiRetry(() => gemini().interactions.create({
     model: geminiModel(),
     store: false,
     input: [part, { type: "text" as const, text: opts.prompt }],
     generation_config: { temperature: 0 },
     response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
-  });
+  }));
   return interaction.output_text ?? "";
 }
 
@@ -216,7 +222,7 @@ export async function startVideoInteraction(opts: {
   prompt: string;
   schema: Record<string, unknown>;
 }) {
-  const interaction = await gemini().interactions.create({
+  const interaction = await withGeminiRetry(() => gemini().interactions.create({
     model: opts.model ?? geminiModel(),
     background: true,
     store: true,
@@ -232,7 +238,7 @@ export async function startVideoInteraction(opts: {
     ],
     generation_config: { temperature: 0.1 },
     response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
-  });
+  }));
   return interaction.id;
 }
 
@@ -245,7 +251,7 @@ export async function startClipsInteraction(opts: {
   prompt: string;
   schema: Record<string, unknown>;
 }) {
-  const interaction = await gemini().interactions.create({
+  const interaction = await withGeminiRetry(() => gemini().interactions.create({
     model: geminiModel(),
     background: true,
     store: true,
@@ -261,7 +267,7 @@ export async function startClipsInteraction(opts: {
     ],
     generation_config: { temperature: 0 },
     response_format: { type: "text", mime_type: "application/json", schema: opts.schema },
-  });
+  }));
   return interaction.id;
 }
 
@@ -271,7 +277,7 @@ export type InteractionResult =
   | { status: "done"; text: string; inputTokens: number | null; outputTokens: number | null };
 
 export async function getVideoInteraction(id: string): Promise<InteractionResult> {
-  const it = await gemini().interactions.get(id);
+  const it = await withGeminiRetry(() => gemini().interactions.get(id));
   if (it.status === "completed") {
     return {
       status: "done",
@@ -282,7 +288,7 @@ export async function getVideoInteraction(id: string): Promise<InteractionResult
   }
   if (it.status === "in_progress" || it.status === "queued") return { status: "running" };
   const message = it.errors?.map((e) => (e as { message?: string }).message).filter(Boolean).join("; ");
-  return { status: "failed", error: message || `Analysis ended with status "${it.status}".` };
+  return { status: "failed", error: plainGeminiFailure(message || `Analysis ended with status "${it.status}".`) };
 }
 
 export function parsePossessionLog(text: string): PossessionLog {

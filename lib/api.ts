@@ -3,6 +3,7 @@ import { allowAttempt, clientIp } from "@/lib/auth/rate-limit";
 import { SESSION_COOKIE, canUseSite, isAdminRole, verifySessionToken } from "@/lib/auth/session";
 import { DbError } from "@/lib/db/errors";
 import { diagnoseGemini, GeminiConfigError } from "@/lib/gemini/client";
+import { OUT_OF_CREDIT_MESSAGE, RATE_LIMIT_MESSAGE } from "@/lib/gemini/errors";
 
 // Shared wrapper for the Gemini API routes: rate limit plus uniform JSON
 // errors. Auth is enforced by proxy.ts before a request reaches a route.
@@ -44,8 +45,8 @@ async function guardedInner(request: Request, handler: () => Promise<Response>):
     if (err instanceof DbError) return NextResponse.json(err.code ? { error: err.message, code: err.code } : { error: err.message }, { status: err.status });
     if (err instanceof GeminiConfigError) return jsonError(503, "Gemini isn't set up yet (missing API key).");
     const status = (err as { status?: number }).status;
-    if (status === 402) return jsonError(402, "Gemini credits are used up. Add credits in Google AI Studio.");
-    if (status === 429) return jsonError(429, "Gemini rate limit hit. Wait a minute and try again.");
+    if (status === 402) return jsonError(402, OUT_OF_CREDIT_MESSAGE);
+    if (status === 429) return jsonError(429, RATE_LIMIT_MESSAGE);
     if (status === 400 || status === 401 || status === 403) {
       // Say what Google actually said (error.message and error.status from its reply), not a guess about the key.
       const why = await diagnoseGemini(err);
