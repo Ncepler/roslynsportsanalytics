@@ -44,7 +44,7 @@ These are set in two places: your own computer (a file called `.env.local`, neve
 | `ADMIN_PASSWORD` | The admin password (must differ from the club password) | You choose it |
 | `SESSION_SECRET` | Random text that makes sign-ins tamper-proof (32+ characters) | Any password generator, or `openssl rand -base64 32` |
 | `GEMINI_API_KEY` | Lets the site use Gemini (video analysis, schedule screenshots and the Season summary). Google now issues only `AQ.` keys; paste the whole key with nothing cut off. | aistudio.google.com/apikey |
-| `GEMINI_MODEL` | Which Gemini model to use (for everything). If it is wrong, the site names the models your key can use. | Google's model list |
+| `GEMINI_MODEL` | Optional. If set, this one model is used for EVERYTHING and overrides each sport's own default (basketball and lacrosse default to `gemini-3.8-flash`). Leave it unset to use the defaults. If it is wrong, the site names the models your key can use. | Google's model list |
 | `GEMINI_TIER` | `free` or `paid`. `free` shows a banner "don't upload student footage". Switch to `paid` only once billing is set up. | You set it |
 | `ADMIN_BYPASS_CODE` | Secret code for the owner test. Leave empty to turn that feature off. | You choose it |
 | `BLOB_READ_WRITE_TOKEN` (or `BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`) | Added by Vercel when you connect a Blob store. Used only for the few minutes a video is handed to Gemini. | Vercel → Storage |
